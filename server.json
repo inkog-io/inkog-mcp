@@ -1,0 +1,98 @@
+{
+  "$schema": "https://registry.modelcontextprotocol.io/schemas/server.json",
+  "name": "inkog",
+  "displayName": "Inkog AI Security Platform",
+  "description": "AI agent security platform with vulnerability scanning, AGENTS.md governance verification, EU AI Act compliance, and MLBOM generation. Purpose-built for LangChain, CrewAI, LangGraph, n8n, and other agent frameworks.",
+  "homepage": "https://inkog.io",
+  "repository": "https://github.com/inkog-io/inkog-mcp",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Inkog",
+    "email": "hello@inkog.io",
+    "url": "https://inkog.io"
+  },
+  "categories": [
+    "security",
+    "compliance",
+    "governance",
+    "ai-agents",
+    "development"
+  ],
+  "tags": [
+    "security",
+    "ai-security",
+    "ai-agents",
+    "agents-md",
+    "governance",
+    "compliance",
+    "eu-ai-act",
+    "nist",
+    "owasp",
+    "mlbom",
+    "langchain",
+    "crewai",
+    "langgraph",
+    "vulnerability-scanner"
+  ],
+  "tools": [
+    {
+      "name": "inkog_scan",
+      "description": "Scan AI agent code for security vulnerabilities including prompt injection, infinite loops, token bombing, SQL injection via LLM, and governance gaps"
+    },
+    {
+      "name": "inkog_verify_governance",
+      "description": "Validate that AGENTS.md declarations match actual code behavior. Unique capability for EU AI Act Article 14 compliance"
+    },
+    {
+      "name": "inkog_compliance_report",
+      "description": "Generate compliance reports for EU AI Act, NIST AI RMF, ISO 42001, or OWASP LLM Top 10"
+    },
+    {
+      "name": "inkog_explain_finding",
+      "description": "Get detailed explanation and remediation guidance for a security finding or pattern"
+    },
+    {
+      "name": "inkog_audit_mcp_server",
+      "description": "Security audit any MCP server from the registry or GitHub repository"
+    },
+    {
+      "name": "inkog_generate_mlbom",
+      "description": "Generate a Machine Learning Bill of Materials (MLBOM) in CycloneDX or SPDX format"
+    },
+    {
+      "name": "inkog_audit_a2a",
+      "description": "Audit Agent-to-Agent (A2A) communications in multi-agent systems for security risks"
+    }
+  ],
+  "resources": [],
+  "prompts": [],
+  "installation": {
+    "npm": "@inkog-io/mcp",
+    "command": "npx -y @inkog-io/mcp"
+  },
+  "auth": {
+    "type": "api-key",
+    "envVar": "INKOG_API_KEY",
+    "instructions": "Get your free API key at https://app.inkog.io"
+  },
+  "examples": [
+    {
+      "title": "Scan for vulnerabilities",
+      "prompt": "Use Inkog to scan my agent code for security vulnerabilities"
+    },
+    {
+      "title": "Verify governance",
+      "prompt": "Verify that my AGENTS.md declarations match the actual code behavior"
+    },
+    {
+      "title": "Generate compliance report",
+      "prompt": "Generate an EU AI Act compliance report for my AI agent"
+    },
+    {
+      "title": "Audit MCP server",
+      "prompt": "Audit the GitHub MCP server for security issues"
+    }
+  ],
+  "version": "1.0.0",
+  "minNodeVersion": "18.0.0"
+}

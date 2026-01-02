@@ -1,0 +1,64 @@
+{
+  "name": "@inkog-io/mcp",
+  "version": "1.0.0",
+  "description": "Inkog AI Security Platform - MCP Server for AI agent vulnerability scanning, AGENTS.md governance verification, and compliance reporting",
+  "author": "Inkog <hello@inkog.io>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inkog-io/inkog-mcp"
+  },
+  "homepage": "https://inkog.io",
+  "keywords": [
+    "mcp",
+    "ai-security",
+    "ai-agents",
+    "agents-md",
+    "governance",
+    "compliance",
+    "eu-ai-act",
+    "langchain",
+    "crewai",
+    "langgraph",
+    "vulnerability-scanner"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "inkog-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepublishOnly": "npm run build && npm run lint && npm run test:run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
