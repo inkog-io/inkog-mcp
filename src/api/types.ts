@@ -84,16 +84,18 @@ export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 
 export interface ScanResponse {
   success: boolean;
-  scanId: string;
-  riskScore: number;
-  findingsCount: number;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  findings: Finding[];
-  filesScanned: number;
-  scanDuration: string;
+  scan_id: string;
+  risk_score: number;
+  files_scanned: number;
+  scan_duration?: string;
+  summary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  findings?: Finding[];
   governance?: GovernanceResult;
 }
 

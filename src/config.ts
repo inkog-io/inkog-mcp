@@ -35,6 +35,17 @@ const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 
 /**
+ * Parse integer with NaN validation
+ */
+function parseIntSafe(value: string, fallback?: number): number | undefined {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return parsed;
+}
+
+/**
  * Load configuration from environment variables
  */
 function loadFromEnvironment(): Record<string, unknown> {
@@ -52,17 +63,26 @@ function loadFromEnvironment(): Record<string, unknown> {
 
   const apiTimeout = process.env.INKOG_API_TIMEOUT;
   if (apiTimeout !== undefined) {
-    config.apiTimeout = parseInt(apiTimeout, 10);
+    const parsed = parseIntSafe(apiTimeout);
+    if (parsed !== undefined) {
+      config.apiTimeout = parsed;
+    }
   }
 
   const retryAttempts = process.env.INKOG_API_RETRY_ATTEMPTS;
   if (retryAttempts !== undefined) {
-    config.apiRetryAttempts = parseInt(retryAttempts, 10);
+    const parsed = parseIntSafe(retryAttempts);
+    if (parsed !== undefined) {
+      config.apiRetryAttempts = parsed;
+    }
   }
 
   const retryDelay = process.env.INKOG_API_RETRY_DELAY;
   if (retryDelay !== undefined) {
-    config.apiRetryDelay = parseInt(retryDelay, 10);
+    const parsed = parseIntSafe(retryDelay);
+    if (parsed !== undefined) {
+      config.apiRetryDelay = parsed;
+    }
   }
 
   const serverName = process.env.INKOG_SERVER_NAME;

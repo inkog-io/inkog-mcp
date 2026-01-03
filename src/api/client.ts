@@ -153,7 +153,8 @@ export class InkogClient {
 
         // Handle rate limiting
         if (response.status === 429) {
-          const retryAfter = parseInt(response.headers.get('Retry-After') ?? '60', 10);
+          const retryAfterRaw = parseInt(response.headers.get('Retry-After') ?? '60', 10);
+          const retryAfter = Number.isNaN(retryAfterRaw) ? 60 : retryAfterRaw;
           throw new InkogRateLimitError(retryAfter);
         }
 
@@ -245,33 +246,46 @@ export class InkogClient {
   }
 
   /**
-   * Verify AGENTS.md governance declarations against actual code
+   * Verify AGENTS.md governance declarations against actual code.
+   * IMPORTANT: Requires a scanId from a previous scan. Direct file upload is only
+   * supported via multipart form with an AGENTS.md file.
    */
-  async verifyGovernance(files: FileInput[]): Promise<GovernanceVerifyResponse> {
+  async verifyGovernance(options: {
+    scanId: string;
+  }): Promise<GovernanceVerifyResponse> {
+    if (!options.scanId) {
+      throw new Error('scanId is required. Run a scan first, then verify governance.');
+    }
+
     return this.request<GovernanceVerifyResponse>({
       method: 'POST',
       path: 'governance/verify',
-      body: { files },
+      body: {
+        scan_id: options.scanId,
+      },
     });
   }
 
   /**
-   * Generate compliance report for a regulatory framework
+   * Generate compliance report for a regulatory framework.
+   * IMPORTANT: Requires a scanId from a previous scan.
    */
-  async generateComplianceReport(
-    files: FileInput[],
-    options?: {
-      framework?: ComplianceFramework | 'all';
-      format?: 'markdown' | 'json' | 'pdf';
+  async generateComplianceReport(options: {
+    scanId: string;
+    framework?: ComplianceFramework | 'all';
+    format?: 'markdown' | 'json' | 'pdf';
+  }): Promise<ComplianceReportResponse> {
+    if (!options.scanId) {
+      throw new Error('scanId is required. Run a scan first, then generate compliance report.');
     }
-  ): Promise<ComplianceReportResponse> {
+
     return this.request<ComplianceReportResponse>({
       method: 'POST',
       path: 'compliance/report',
       body: {
-        files,
-        framework: options?.framework ?? 'eu-ai-act',
-        format: options?.format ?? 'markdown',
+        scan_id: options.scanId,
+        framework: options.framework ?? 'eu-ai-act',
+        format: options.format ?? 'markdown',
       },
     });
   }
@@ -287,17 +301,12 @@ export class InkogClient {
       throw new Error('Either findingId or pattern must be provided');
     }
 
-    const params = new URLSearchParams();
-    if (options.findingId !== undefined) {
-      params.set('finding_id', options.findingId);
-    }
-    if (options.pattern !== undefined) {
-      params.set('pattern', options.pattern);
-    }
+    // Backend expects: /v1/findings/{pattern_id}/explain
+    const patternId = options.pattern ?? options.findingId;
 
     return this.request<ExplainResponse>({
       method: 'GET',
-      path: `findings/explain?${params.toString()}`,
+      path: `findings/${patternId}/explain`,
     });
   }
 
@@ -312,52 +321,79 @@ export class InkogClient {
       throw new Error('Either serverName or repositoryUrl must be provided');
     }
 
+    // Convert to snake_case for backend API
+    const body: Record<string, unknown> = {};
+    if (options.serverName) {
+      body.server_name = options.serverName;
+    }
+    if (options.repositoryUrl) {
+      body.repository_url = options.repositoryUrl;
+    }
+
     return this.request<McpAuditResponse>({
       method: 'POST',
       path: 'mcp/audit',
-      body: options,
+      body,
     });
   }
 
   /**
-   * Generate ML Bill of Materials (MLBOM)
+   * Generate ML Bill of Materials (MLBOM).
+   * Either provide files directly, or reference a previous scan by scanId.
    */
   async generateMlbom(
     files: FileInput[],
     options?: {
       format?: MlbomFormat;
       includeVulnerabilities?: boolean;
+      scanId?: string;
     }
   ): Promise<MlbomResponse> {
+    const body: Record<string, unknown> = {
+      format: options?.format ?? 'cyclonedx',
+      include_vulnerabilities: options?.includeVulnerabilities ?? true,
+    };
+
+    if (options?.scanId) {
+      body.scan_id = options.scanId;
+    } else if (files.length > 0) {
+      body.files = files;
+    }
+
     return this.request<MlbomResponse>({
       method: 'POST',
       path: 'mlbom/generate',
-      body: {
-        files,
-        format: options?.format ?? 'cyclonedx',
-        include_vulnerabilities: options?.includeVulnerabilities ?? true,
-      },
+      body,
     });
   }
 
   /**
-   * Audit Agent-to-Agent (A2A) communications
+   * Audit Agent-to-Agent (A2A) communications.
+   * Either provide files directly, or reference a previous scan by scanId.
    */
   async auditA2A(
     files: FileInput[],
     options?: {
       protocol?: A2AProtocol;
       checkDelegationChains?: boolean;
+      scanId?: string;
     }
   ): Promise<A2AAuditResponse> {
+    const body: Record<string, unknown> = {
+      protocol: options?.protocol ?? 'auto-detect',
+      check_delegation_chains: options?.checkDelegationChains ?? true,
+    };
+
+    if (options?.scanId) {
+      body.scan_id = options.scanId;
+    } else if (files.length > 0) {
+      body.files = files;
+    }
+
     return this.request<A2AAuditResponse>({
       method: 'POST',
       path: 'a2a/audit',
-      body: {
-        files,
-        protocol: options?.protocol ?? 'auto-detect',
-        check_delegation_chains: options?.checkDelegationChains ?? true,
-      },
+      body,
     });
   }
 }

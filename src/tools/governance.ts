@@ -14,7 +14,13 @@
 
 import { z } from 'zod';
 
-import { getClient, InkogAuthError, InkogNetworkError } from '../api/client.js';
+import {
+  getClient,
+  InkogApiError,
+  InkogAuthError,
+  InkogNetworkError,
+  InkogRateLimitError,
+} from '../api/client.js';
 import type { GovernanceMismatch } from '../api/types.js';
 import { findAgentsMd, getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
@@ -107,9 +113,25 @@ async function governanceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     // Get relative paths for cleaner output
     const files = getRelativePaths(readResult.files, args.path);
 
-    // Call Inkog API
+    // Call Inkog API - first scan, then verify governance
     const client = getClient();
-    const response = await client.verifyGovernance(files);
+
+    // Step 1: Run a scan to get a scan_id
+    const scanResponse = await client.scan(files, { policy: 'governance' });
+    if (!scanResponse.success || !scanResponse.scan_id) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Scan failed: Unable to analyze files',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Step 2: Use scan_id to verify governance
+    const response = await client.verifyGovernance({ scanId: scanResponse.scan_id });
 
     // Build output
     let output = '╔══════════════════════════════════════════════════════╗\n';
@@ -194,6 +216,18 @@ async function governanceHandler(rawArgs: Record<string, unknown>): Promise<Tool
       };
     }
 
+    if (error instanceof InkogRateLimitError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Rate Limited\n\nToo many requests. Please retry after ${error.retryAfter} seconds.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (error instanceof InkogNetworkError) {
       return {
         content: [
@@ -206,7 +240,28 @@ async function governanceHandler(rawArgs: Record<string, unknown>): Promise<Tool
       };
     }
 
-    throw error;
+    if (error instanceof InkogApiError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `API error: ${error.message}${error.details ? `\n\nDetails: ${JSON.stringify(error.details)}` : ''}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 

@@ -12,7 +12,13 @@
 
 import { z } from 'zod';
 
-import { getClient, InkogAuthError, InkogNetworkError } from '../api/client.js';
+import {
+  getClient,
+  InkogApiError,
+  InkogAuthError,
+  InkogNetworkError,
+  InkogRateLimitError,
+} from '../api/client.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
 // =============================================================================
@@ -192,6 +198,18 @@ async function explainHandler(rawArgs: Record<string, unknown>): Promise<ToolRes
       };
     }
 
+    if (error instanceof InkogRateLimitError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Rate Limited\n\nToo many requests. Please retry after ${error.retryAfter} seconds.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (error instanceof InkogNetworkError) {
       return {
         content: [
@@ -204,7 +222,28 @@ async function explainHandler(rawArgs: Record<string, unknown>): Promise<ToolRes
       };
     }
 
-    throw error;
+    if (error instanceof InkogApiError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `API error: ${error.message}${error.details ? `\n\nDetails: ${JSON.stringify(error.details)}` : ''}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 

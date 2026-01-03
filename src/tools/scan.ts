@@ -13,7 +13,13 @@
 
 import { z } from 'zod';
 
-import { getClient, InkogAuthError, InkogNetworkError } from '../api/client.js';
+import {
+  getClient,
+  InkogApiError,
+  InkogAuthError,
+  InkogNetworkError,
+  InkogRateLimitError,
+} from '../api/client.js';
 import type { Finding, SecurityPolicy } from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
@@ -210,21 +216,22 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
     }
 
     // Build human-readable output
+    const findings = response.findings ?? [];
     let output = formatSummary(
-      response.findings,
-      response.riskScore,
-      response.filesScanned,
+      findings,
+      response.risk_score,
+      response.files_scanned,
       args.policy
     );
 
     // Add findings
-    if (response.findings.length > 0) {
+    if (findings.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
       // Group by tier
-      const vulnerabilities = response.findings.filter((f) => f.riskTier === 'vulnerability');
-      const riskPatterns = response.findings.filter((f) => f.riskTier === 'risk_pattern');
-      const hardening = response.findings.filter((f) => f.riskTier === 'hardening');
+      const vulnerabilities = findings.filter((f) => f.riskTier === 'vulnerability');
+      const riskPatterns = findings.filter((f) => f.riskTier === 'risk_pattern');
+      const hardening = findings.filter((f) => f.riskTier === 'hardening');
 
       if (vulnerabilities.length > 0) {
         output += '🔴 EXPLOITABLE VULNERABILITIES:\n\n';
@@ -249,11 +256,12 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
     }
 
     // Add governance summary if available
-    if (response.governance !== undefined) {
+    const governance = response.governance;
+    if (governance !== undefined) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🏛️  GOVERNANCE STATUS\n\n';
-      output += `   Governance Score: ${response.governance.governanceScore}/100\n`;
-      output += `   EU AI Act Readiness: ${response.governance.euAiActReadiness}\n`;
+      output += `   Governance Score: ${governance.governanceScore}/100\n`;
+      output += `   EU AI Act Readiness: ${governance.euAiActReadiness}\n`;
     }
 
     return {
@@ -277,6 +285,18 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
       };
     }
 
+    if (error instanceof InkogRateLimitError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Rate Limited\n\nToo many requests. Please retry after ${error.retryAfter} seconds.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (error instanceof InkogNetworkError) {
       return {
         content: [
@@ -289,7 +309,28 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
       };
     }
 
-    throw error;
+    if (error instanceof InkogApiError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `API error: ${error.message}${error.details ? `\n\nDetails: ${JSON.stringify(error.details)}` : ''}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 

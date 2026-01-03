@@ -16,7 +16,13 @@
 
 import { z } from 'zod';
 
-import { getClient, InkogAuthError, InkogNetworkError } from '../api/client.js';
+import {
+  getClient,
+  InkogApiError,
+  InkogAuthError,
+  InkogNetworkError,
+  InkogRateLimitError,
+} from '../api/client.js';
 import type { MlComponent, Severity } from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
@@ -191,11 +197,28 @@ async function mlbomHandler(rawArgs: Record<string, unknown>): Promise<ToolResul
     // Get relative paths
     const files = getRelativePaths(readResult.files, args.path);
 
-    // Call Inkog API
+    // Call Inkog API - first scan, then generate MLBOM
     const client = getClient();
-    const response = await client.generateMlbom(files, {
+
+    // Step 1: Run a scan to get a scan_id
+    const scanResponse = await client.scan(files, { policy: 'balanced' });
+    if (!scanResponse.success || !scanResponse.scan_id) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Scan failed: Unable to analyze files',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Step 2: Use scan_id to generate MLBOM
+    const response = await client.generateMlbom([], {
       format: args.format,
       includeVulnerabilities: args.include_vulnerabilities,
+      scanId: scanResponse.scan_id,
     });
 
     // If format is CycloneDX or SPDX, return the pre-formatted content
@@ -344,6 +367,18 @@ async function mlbomHandler(rawArgs: Record<string, unknown>): Promise<ToolResul
       };
     }
 
+    if (error instanceof InkogRateLimitError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Rate Limited\n\nToo many requests. Please retry after ${error.retryAfter} seconds.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (error instanceof InkogNetworkError) {
       return {
         content: [
@@ -356,7 +391,28 @@ async function mlbomHandler(rawArgs: Record<string, unknown>): Promise<ToolResul
       };
     }
 
-    throw error;
+    if (error instanceof InkogApiError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `API error: ${error.message}${error.details ? `\n\nDetails: ${JSON.stringify(error.details)}` : ''}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 

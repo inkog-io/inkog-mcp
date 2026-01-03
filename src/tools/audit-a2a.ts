@@ -18,7 +18,13 @@
 
 import { z } from 'zod';
 
-import { getClient, InkogAuthError, InkogNetworkError } from '../api/client.js';
+import {
+  getClient,
+  InkogApiError,
+  InkogAuthError,
+  InkogNetworkError,
+  InkogRateLimitError,
+} from '../api/client.js';
 import type {
   A2ASecurityIssue,
   AgentDefinition,
@@ -239,11 +245,28 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     // Get relative paths
     const files = getRelativePaths(readResult.files, args.path);
 
-    // Call Inkog API
+    // Call Inkog API - first scan, then audit A2A
     const client = getClient();
-    const response = await client.auditA2A(files, {
+
+    // Step 1: Run a scan to get a scan_id
+    const scanResponse = await client.scan(files, { policy: 'balanced' });
+    if (!scanResponse.success || !scanResponse.scan_id) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'Scan failed: Unable to analyze files',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Step 2: Use scan_id to audit A2A
+    const response = await client.auditA2A([], {
       protocol: args.protocol,
       checkDelegationChains: args.check_delegation_chains,
+      scanId: scanResponse.scan_id,
     });
 
     // Build formatted output
@@ -392,6 +415,18 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
       };
     }
 
+    if (error instanceof InkogRateLimitError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⏱️ Rate Limited\n\nToo many requests. Please retry after ${error.retryAfter} seconds.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
     if (error instanceof InkogNetworkError) {
       return {
         content: [
@@ -404,7 +439,28 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
       };
     }
 
-    throw error;
+    if (error instanceof InkogApiError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `API error: ${error.message}${error.details ? `\n\nDetails: ${JSON.stringify(error.details)}` : ''}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Error: ${message}`,
+        },
+      ],
+      isError: true,
+    };
   }
 }
 
