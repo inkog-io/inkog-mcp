@@ -21,7 +21,7 @@ import {
   InkogNetworkError,
   InkogRateLimitError,
 } from '../api/client.js';
-import type { McpSecurityIssue, Severity } from '../api/types.js';
+import type { Severity } from '../api/types.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
 // =============================================================================
@@ -79,53 +79,6 @@ function formatSecurityScore(score: number): string {
   }
 }
 
-function formatIssue(issue: McpSecurityIssue): string {
-  const icon = formatSeverityIcon(issue.severity);
-  let output = `${icon} [${issue.severity}] ${issue.title}\n`;
-  output += `   Category: ${issue.category}\n`;
-  output += `   ${issue.description}\n`;
-
-  if (issue.file !== undefined) {
-    const location = issue.line !== undefined ? `${issue.file}:${issue.line}` : issue.file;
-    output += `   📍 ${location}\n`;
-  }
-
-  output += `   💡 ${issue.recommendation}`;
-  return output;
-}
-
-function formatToolPermissions(
-  permissions: Record<
-    string,
-    {
-      reads: string[];
-      writes: string[];
-      executes: string[];
-      network: string[];
-    }
-  >
-): string {
-  let output = '';
-
-  for (const [tool, perms] of Object.entries(permissions)) {
-    output += `\n🔧 ${tool}:\n`;
-
-    if (perms.reads.length > 0) {
-      output += `   📖 Reads: ${perms.reads.join(', ')}\n`;
-    }
-    if (perms.writes.length > 0) {
-      output += `   ✏️  Writes: ${perms.writes.join(', ')}\n`;
-    }
-    if (perms.executes.length > 0) {
-      output += `   ⚡ Executes: ${perms.executes.join(', ')}\n`;
-    }
-    if (perms.network.length > 0) {
-      output += `   🌐 Network: ${perms.network.join(', ')}\n`;
-    }
-  }
-
-  return output;
-}
 
 // =============================================================================
 // Handler
@@ -165,74 +118,117 @@ async function auditMcpHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     output += '║           🔒 MCP Server Security Audit                ║\n';
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
+    // Show cache warning if using offline data
+    if (response.cache_warning) {
+      output += `⚠️  ${response.cache_warning}\n\n`;
+    }
+
+    // Get data using new field names (with fallbacks for legacy compatibility)
+    const serverInfo = response.server ?? response.serverInfo;
+    const auditResults = response.audit_results;
+    const findings = response.findings ?? response.issues ?? [];
+    const securityScore = auditResults?.security_score ?? response.securityScore ?? 0;
+
     // Server info
-    output += `📦 Server: ${response.serverInfo.displayName ?? response.serverInfo.name}\n`;
-    if (response.serverInfo.description !== undefined) {
-      output += `   ${response.serverInfo.description}\n`;
-    }
-    output += `🔗 Repository: ${response.serverInfo.repository}\n`;
-    if (response.serverInfo.license !== undefined) {
-      output += `📄 License: ${response.serverInfo.license}\n`;
-    }
-    output += `🔧 Tools: ${response.serverInfo.tools.join(', ')}\n\n`;
-
-    // Security score
-    output += `📊 Security Score: ${formatSecurityScore(response.securityScore)}\n\n`;
-
-    // Issues summary
-    const critical = response.issues.filter((i) => i.severity === 'CRITICAL').length;
-    const high = response.issues.filter((i) => i.severity === 'HIGH').length;
-    const medium = response.issues.filter((i) => i.severity === 'MEDIUM').length;
-    const low = response.issues.filter((i) => i.severity === 'LOW').length;
-
-    if (response.issues.length === 0) {
-      output += '✅ No security issues detected!\n\n';
-    } else {
-      output += `📋 Security Issues: ${response.issues.length}\n`;
-      output += `   🔴 Critical: ${critical} | 🟠 High: ${high} | 🟡 Medium: ${medium} | 🟢 Low: ${low}\n\n`;
-    }
-
-    // Data flow risks
-    if (response.dataFlowRisks.length > 0) {
-      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '⚠️  DATA FLOW RISKS\n\n';
-      for (const risk of response.dataFlowRisks) {
-        output += `   • ${risk}\n`;
+    if (serverInfo) {
+      output += `📦 Server: ${serverInfo.name}\n`;
+      if (serverInfo.description) {
+        output += `   ${serverInfo.description}\n`;
+      }
+      if (serverInfo.repository) {
+        output += `🔗 Repository: ${serverInfo.repository}\n`;
+      }
+      if (serverInfo.license) {
+        output += `📄 License: ${serverInfo.license}\n`;
       }
       output += '\n';
     }
 
-    // Tool permissions
-    if (Object.keys(response.toolPermissions).length > 0) {
+    // Security score
+    output += `📊 Security Score: ${formatSecurityScore(securityScore)}\n`;
+    if (auditResults?.overall_risk) {
+      output += `📈 Overall Risk: ${auditResults.overall_risk.toUpperCase()}\n`;
+    }
+    output += '\n';
+
+    // Findings summary
+    const critical = findings.filter((i) => i.severity === 'CRITICAL' || i.severity === 'critical').length;
+    const high = findings.filter((i) => i.severity === 'HIGH' || i.severity === 'high').length;
+    const medium = findings.filter((i) => i.severity === 'MEDIUM' || i.severity === 'medium').length;
+    const low = findings.filter((i) => i.severity === 'LOW' || i.severity === 'low').length;
+
+    if (findings.length === 0) {
+      output += '✅ No security issues detected!\n\n';
+    } else {
+      output += `📋 Security Issues: ${findings.length}\n`;
+      output += `   🔴 Critical: ${critical} | 🟠 High: ${high} | 🟡 Medium: ${medium} | 🟢 Low: ${low}\n\n`;
+    }
+
+    // Permissions analysis
+    if (response.permissions) {
+      const perms = response.permissions;
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '🔐 TOOL PERMISSIONS ANALYSIS\n';
-      output += formatToolPermissions(response.toolPermissions);
+      output += '🔐 PERMISSIONS ANALYSIS\n\n';
+      output += `   Scope: ${perms.scope}\n`;
+      if (perms.file_access) output += '   📁 File System Access\n';
+      if (perms.network_access) output += '   🌐 Network Access\n';
+      if (perms.code_execution) output += '   ⚡ Code Execution\n';
+      if (perms.database_access) output += '   🗄️  Database Access\n';
+      if (perms.environment_access) output += '   🔧 Environment Access\n';
       output += '\n';
     }
 
-    // Detailed issues
-    if (response.issues.length > 0) {
+    // Tools analysis
+    if (response.tools && response.tools.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '🔍 SECURITY ISSUES\n\n';
+      output += '🔧 TOOLS ANALYSIS\n\n';
+      for (const tool of response.tools) {
+        const riskIcon = tool.risk_level === 'dangerous' ? '🔴' : tool.risk_level === 'moderate' ? '🟡' : '🟢';
+        output += `   ${riskIcon} ${tool.name} (${tool.risk_level})\n`;
+        if (tool.risk_reasons && tool.risk_reasons.length > 0) {
+          for (const reason of tool.risk_reasons) {
+            output += `      • ${reason}\n`;
+          }
+        }
+      }
+      output += '\n';
+    }
+
+    // Detailed findings
+    if (findings.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '🔍 SECURITY FINDINGS\n\n';
 
       // Critical and high first
-      const criticalHigh = response.issues.filter(
-        (i) => i.severity === 'CRITICAL' || i.severity === 'HIGH'
+      const criticalHigh = findings.filter(
+        (i) => i.severity === 'CRITICAL' || i.severity === 'critical' ||
+               i.severity === 'HIGH' || i.severity === 'high'
       );
-      const mediumLow = response.issues.filter(
-        (i) => i.severity === 'MEDIUM' || i.severity === 'LOW'
+      const mediumLow = findings.filter(
+        (i) => i.severity === 'MEDIUM' || i.severity === 'medium' ||
+               i.severity === 'LOW' || i.severity === 'low'
       );
 
-      for (const issue of criticalHigh) {
-        output += formatIssue(issue) + '\n\n';
+      for (const finding of criticalHigh) {
+        output += `${formatSeverityIcon(finding.severity.toUpperCase() as Severity)} [${finding.severity.toUpperCase()}] ${finding.title}\n`;
+        output += `   ${finding.description}\n`;
+        if (finding.remediation) {
+          output += `   💡 ${finding.remediation}\n`;
+        }
+        output += '\n';
       }
 
       if (mediumLow.length > 0 && criticalHigh.length > 0) {
         output += '--- Lower Severity ---\n\n';
       }
 
-      for (const issue of mediumLow) {
-        output += formatIssue(issue) + '\n\n';
+      for (const finding of mediumLow) {
+        output += `${formatSeverityIcon(finding.severity.toUpperCase() as Severity)} [${finding.severity.toUpperCase()}] ${finding.title}\n`;
+        output += `   ${finding.description}\n`;
+        if (finding.remediation) {
+          output += `   💡 ${finding.remediation}\n`;
+        }
+        output += '\n';
       }
     }
 

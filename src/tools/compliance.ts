@@ -19,7 +19,12 @@ import {
   InkogNetworkError,
   InkogRateLimitError,
 } from '../api/client.js';
-import type { ComplianceArticle, ComplianceFramework } from '../api/types.js';
+import type {
+  ComplianceArticle,
+  ComplianceCategory,
+  ComplianceFramework,
+  ComplianceRecommendation,
+} from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
@@ -49,7 +54,7 @@ type ComplianceArgs = z.infer<typeof ComplianceArgsSchema>;
 // Helpers
 // =============================================================================
 
-function getFrameworkDisplayName(framework: ComplianceFramework | 'all'): string {
+function getFrameworkDisplayName(framework: ComplianceFramework | string): string {
   switch (framework) {
     case 'eu-ai-act':
       return 'EU AI Act';
@@ -59,50 +64,120 @@ function getFrameworkDisplayName(framework: ComplianceFramework | 'all'): string
       return 'ISO 42001 AI Management System';
     case 'owasp-llm-top-10':
       return 'OWASP LLM Top 10';
-    case 'all':
-      return 'All Frameworks';
     default:
       return framework;
   }
 }
 
 function getStatusIcon(status: string): string {
-  switch (status) {
-    case 'COMPLIANT':
+  const lower = status.toLowerCase();
+  switch (lower) {
+    case 'compliant':
+    case 'pass':
       return '✅';
-    case 'NON_COMPLIANT':
+    case 'non-compliant':
+    case 'non_compliant':
+    case 'fail':
       return '❌';
-    case 'PARTIAL':
+    case 'partial':
       return '⚠️';
-    case 'NOT_APPLICABLE':
+    case 'not_applicable':
+    case 'n/a':
       return '➖';
     default:
       return '❓';
   }
 }
 
+function getRiskLevelIcon(level: string): string {
+  const lower = level.toLowerCase();
+  switch (lower) {
+    case 'critical':
+      return '🔴';
+    case 'high':
+      return '🟠';
+    case 'medium':
+      return '🟡';
+    case 'low':
+      return '🟢';
+    default:
+      return '⚪';
+  }
+}
+
+function formatScore(score: number): string {
+  if (score >= 90) {
+    return `✅ ${score}/100 (Excellent)`;
+  } else if (score >= 70) {
+    return `🟢 ${score}/100 (Good)`;
+  } else if (score >= 50) {
+    return `🟡 ${score}/100 (Fair)`;
+  } else if (score >= 30) {
+    return `🟠 ${score}/100 (Poor)`;
+  } else {
+    return `🔴 ${score}/100 (Critical)`;
+  }
+}
+
 function formatArticle(article: ComplianceArticle): string {
   const icon = getStatusIcon(article.status);
   let output = `${icon} ${article.id}: ${article.title}\n`;
-  output += `   Status: ${article.status}\n`;
+  output += `   Status: ${article.status} | Score: ${article.score}/100\n`;
 
-  if (article.findings.length > 0) {
-    output += `   Findings: ${article.findings.length}\n`;
-    for (const finding of article.findings.slice(0, 3)) {
-      output += `     • ${finding.message} (${finding.file}:${finding.line})\n`;
+  if (article.requirements && article.requirements.length > 0) {
+    output += `   Requirements:\n`;
+    for (const req of article.requirements) {
+      output += `     • ${req}\n`;
+    }
+  }
+
+  // findings is an array of finding IDs (strings)
+  if (article.findings && article.findings.length > 0) {
+    output += `   Related Findings: ${article.findings.length}\n`;
+    for (const findingId of article.findings.slice(0, 3)) {
+      output += `     • ${findingId}\n`;
     }
     if (article.findings.length > 3) {
       output += `     ... and ${article.findings.length - 3} more\n`;
     }
   }
 
-  if (article.recommendations.length > 0) {
-    output += `   Recommendations:\n`;
-    for (const rec of article.recommendations) {
-      output += `     💡 ${rec}\n`;
-    }
+  if (article.remediation) {
+    output += `   💡 Remediation: ${article.remediation}\n`;
   }
 
+  return output;
+}
+
+function formatCategory(category: ComplianceCategory): string {
+  const icon = getStatusIcon(category.status);
+  let output = `${icon} ${category.id}: ${category.name}\n`;
+  output += `   Status: ${category.status}\n`;
+
+  if (category.description) {
+    output += `   ${category.description}\n`;
+  }
+
+  if (category.finding_ids && category.finding_ids.length > 0) {
+    output += `   Related Findings: ${category.finding_ids.length}\n`;
+  }
+
+  if (category.impact) {
+    output += `   Impact: ${category.impact}\n`;
+  }
+
+  return output;
+}
+
+function formatRecommendation(rec: ComplianceRecommendation, index: number): string {
+  let output = `${index + 1}. [${rec.priority.toUpperCase()}] ${rec.title}\n`;
+  output += `   ${rec.description}\n`;
+  if (rec.article) {
+    output += `   Article: ${rec.article}\n`;
+  }
+  if (rec.effort) {
+    output += `   Effort: ${rec.effort}\n`;
+  }
   return output;
 }
 
@@ -170,13 +245,13 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
       format: args.format,
     });
 
-    // If format is markdown or pdf, return the pre-formatted content
-    if (args.format !== 'json' && response.reportContent !== undefined) {
+    // If format is markdown or pdf and there's a pre-formatted report, return it
+    if (args.format !== 'json' && response.markdown_report) {
       return {
         content: [
           {
             type: 'text',
-            text: response.reportContent,
+            text: response.markdown_report,
           },
         ],
       };
@@ -184,31 +259,39 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
 
     // Build formatted output
     const frameworkName = getFrameworkDisplayName(response.framework);
-    const overallIcon = getStatusIcon(response.overallStatus);
 
     let output = '╔══════════════════════════════════════════════════════╗\n';
     output += '║           📋 Compliance Report                        ║\n';
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
     output += `🏛️  Framework: ${frameworkName}\n`;
-    output += `📊 Compliance Score: ${response.complianceScore}/100\n`;
-    output += `${overallIcon} Overall Status: ${response.overallStatus}\n`;
-    output += `📅 Generated: ${response.generatedAt}\n\n`;
+    output += `📊 Compliance Score: ${formatScore(response.overall_score)}\n`;
+    output += `${getRiskLevelIcon(response.risk_level)} Risk Level: ${response.risk_level.toUpperCase()}\n`;
+    output += `📅 Generated: ${response.generated_at}\n`;
+    if (response.report_id) {
+      output += `🔗 Report ID: ${response.report_id}\n`;
+    }
+    output += '\n';
 
-    // Executive Summary
+    // Findings summary
     output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    output += '📝 EXECUTIVE SUMMARY\n\n';
-    output += response.executiveSummary + '\n\n';
+    output += '📊 FINDINGS SUMMARY\n\n';
+    const fs = response.findings_summary;
+    output += `   Total: ${fs.total}\n`;
+    output += `   🔴 Critical: ${fs.critical} | 🟠 High: ${fs.high} | 🟡 Medium: ${fs.medium} | 🟢 Low: ${fs.low}\n\n`;
 
-    // Article breakdown
-    if (response.articles.length > 0) {
+    // Article breakdown (for EU AI Act, NIST, ISO)
+    const articles = response.articles ?? [];
+    if (articles.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '📑 ARTICLE BREAKDOWN\n\n';
 
       // Group by status
-      const compliant = response.articles.filter((a) => a.status === 'COMPLIANT');
-      const nonCompliant = response.articles.filter((a) => a.status === 'NON_COMPLIANT');
-      const partial = response.articles.filter((a) => a.status === 'PARTIAL');
+      const compliant = articles.filter((a) => a.status.toLowerCase() === 'compliant');
+      const nonCompliant = articles.filter((a) =>
+        a.status.toLowerCase() === 'non-compliant' || a.status.toLowerCase() === 'non_compliant'
+      );
+      const partial = articles.filter((a) => a.status.toLowerCase() === 'partial');
 
       if (nonCompliant.length > 0) {
         output += '❌ NON-COMPLIANT:\n\n';
@@ -227,9 +310,59 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
       if (compliant.length > 0) {
         output += '✅ COMPLIANT:\n\n';
         for (const article of compliant) {
-          output += `   ${article.id}: ${article.title}\n`;
+          output += `   ${article.id}: ${article.title} (${article.score}/100)\n`;
         }
         output += '\n';
+      }
+    }
+
+    // Category breakdown (for OWASP)
+    const categories = response.categories ?? [];
+    if (categories.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '📂 CATEGORY BREAKDOWN\n\n';
+
+      const passing = categories.filter((c) => c.status.toLowerCase() === 'pass');
+      const failing = categories.filter((c) => c.status.toLowerCase() === 'fail');
+      const partialCats = categories.filter((c) => c.status.toLowerCase() === 'partial');
+
+      if (failing.length > 0) {
+        output += '❌ FAILING:\n\n';
+        for (const cat of failing) {
+          output += formatCategory(cat) + '\n';
+        }
+      }
+
+      if (partialCats.length > 0) {
+        output += '⚠️  PARTIAL:\n\n';
+        for (const cat of partialCats) {
+          output += formatCategory(cat) + '\n';
+        }
+      }
+
+      if (passing.length > 0) {
+        output += '✅ PASSING:\n\n';
+        for (const cat of passing) {
+          output += `   ${cat.id}: ${cat.name}\n`;
+        }
+        output += '\n';
+      }
+    }
+
+    // Recommendations
+    const recommendations = response.recommendations ?? [];
+    if (recommendations.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '💡 RECOMMENDATIONS\n\n';
+
+      // Sort by priority
+      const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      const sorted = [...recommendations].sort((a, b) =>
+        (priorityOrder[a.priority.toLowerCase()] ?? 4) - (priorityOrder[b.priority.toLowerCase()] ?? 4)
+      );
+
+      for (const [index, rec] of sorted.entries()) {
+        output += formatRecommendation(rec, index) + '\n';
       }
     }
 
@@ -241,8 +374,13 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
       output += 'Ensure all high-risk AI systems have:\n';
       output += '• Human-in-the-loop controls\n';
       output += '• Ability to interrupt operations\n';
-      output += '• Audit logging of all actions\n';
+      output += '• Audit logging of all actions\n\n';
     }
+
+    // Footer
+    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+    output += 'Compliance Report powered by Inkog AI Security Platform\n';
+    output += 'Learn more: https://inkog.io/compliance\n';
 
     return {
       content: [

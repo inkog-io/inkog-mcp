@@ -78,6 +78,19 @@ function formatRiskTier(tier: string): string {
   }
 }
 
+function formatGovernanceStatus(status: string): string {
+  switch (status.toLowerCase()) {
+    case 'valid':
+      return '✅ Valid';
+    case 'invalid':
+      return '❌ Invalid';
+    case 'partial':
+      return '⚠️  Partial';
+    default:
+      return status;
+  }
+}
+
 function formatFinding(finding: Finding, detailed: boolean): string {
   const icon = formatSeverityIcon(finding.severity);
   const tierLabel = formatRiskTier(finding.riskTier);
@@ -257,11 +270,21 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
 
     // Add governance summary if available
     const governance = response.governance;
-    if (governance !== undefined) {
+    if (governance) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🏛️  GOVERNANCE STATUS\n\n';
-      output += `   Governance Score: ${governance.governanceScore}/100\n`;
-      output += `   EU AI Act Readiness: ${governance.euAiActReadiness}\n`;
+      output += `   Governance Score: ${governance.score}/100\n`;
+      output += `   Overall Status: ${formatGovernanceStatus(governance.overall_status)}\n`;
+
+      if (governance.declared_capabilities && governance.declared_capabilities.length > 0) {
+        const valid = governance.declared_capabilities.filter((c) => c.status === 'valid').length;
+        const violated = governance.declared_capabilities.filter((c) => c.status === 'violated').length;
+        output += `   Capabilities: ${valid} valid, ${violated} violated\n`;
+      }
+
+      if (governance.mismatches && governance.mismatches.length > 0) {
+        output += `   ⚠️  Mismatches detected: ${governance.mismatches.length}\n`;
+      }
     }
 
     return {

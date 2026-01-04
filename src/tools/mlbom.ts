@@ -23,7 +23,12 @@ import {
   InkogNetworkError,
   InkogRateLimitError,
 } from '../api/client.js';
-import type { MlComponent, Severity } from '../api/types.js';
+import type {
+  MLBOMComponent,
+  MlbomCompleteness,
+  MlbomResponse,
+  MLBOMSummary,
+} from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
@@ -51,7 +56,9 @@ type MlbomArgs = z.infer<typeof MlbomArgsSchema>;
 // Helpers
 // =============================================================================
 
-function formatComponentType(type: MlComponent['type']): string {
+type ComponentType = 'model' | 'tool' | 'data-source' | 'framework' | 'dependency';
+
+function formatComponentType(type: string): string {
   switch (type) {
     case 'model':
       return '🧠 Model';
@@ -64,77 +71,65 @@ function formatComponentType(type: MlComponent['type']): string {
     case 'dependency':
       return '📚 Dependency';
     default:
-      return type;
+      return `📋 ${type}`;
   }
 }
 
-function formatSeverityIcon(severity: Severity): string {
-  switch (severity) {
-    case 'CRITICAL':
-      return '🔴';
-    case 'HIGH':
-      return '🟠';
-    case 'MEDIUM':
-      return '🟡';
-    case 'LOW':
-      return '🟢';
-    default:
-      return '⚪';
+function formatSummaryScore(summary: MLBOMSummary): string {
+  const total = summary.total_components;
+  if (total === 0) {
+    return '⚪ No components detected';
   }
+  if (total <= 5) {
+    return `✅ ${total} components (minimal footprint)`;
+  }
+  if (total <= 15) {
+    return `🟢 ${total} components (moderate complexity)`;
+  }
+  if (total <= 30) {
+    return `🟡 ${total} components (elevated complexity)`;
+  }
+  return `🟠 ${total} components (high complexity)`;
 }
 
-function formatRiskScore(score: number): string {
-  if (score >= 90) {
-    return `✅ ${score}/100 (Low Risk)`;
-  } else if (score >= 70) {
-    return `🟢 ${score}/100 (Moderate Risk)`;
-  } else if (score >= 50) {
-    return `🟡 ${score}/100 (Elevated Risk)`;
-  } else if (score >= 30) {
-    return `🟠 ${score}/100 (High Risk)`;
-  } else {
-    return `🔴 ${score}/100 (Critical Risk)`;
-  }
-}
-
-function formatComponent(component: MlComponent, detailed: boolean): string {
+function formatComponent(component: MLBOMComponent, detailed: boolean): string {
   const typeLabel = formatComponentType(component.type);
   let output = `${typeLabel}: ${component.name}`;
 
-  if (component.version !== undefined) {
+  if (component.version) {
     output += ` v${component.version}`;
   }
 
   output += '\n';
 
-  if (component.provider !== undefined) {
-    output += `   Provider: ${component.provider}\n`;
-  }
-
-  if (component.license !== undefined) {
-    output += `   License: ${component.license}\n`;
-  }
-
-  output += `   📍 ${component.location}`;
-  if (component.line !== undefined) {
-    output += `:${component.line}`;
-  }
-  output += '\n';
-
-  if (detailed && component.properties !== undefined && Object.keys(component.properties).length > 0) {
-    output += '   Properties:\n';
-    for (const [key, value] of Object.entries(component.properties)) {
-      output += `     • ${key}: ${value}\n`;
+  if (detailed) {
+    if (component.supplier) {
+      output += `   Supplier: ${component.supplier.name}`;
+      if (component.supplier.url) {
+        output += ` (${component.supplier.url})`;
+      }
+      output += '\n';
     }
-  }
 
-  if (component.vulnerabilities !== undefined && component.vulnerabilities.length > 0) {
-    output += '   ⚠️  Vulnerabilities:\n';
-    for (const vuln of component.vulnerabilities) {
-      const icon = formatSeverityIcon(vuln.severity);
-      output += `     ${icon} ${vuln.id}: ${vuln.description}\n`;
-      if (vuln.cve !== undefined) {
-        output += `        CVE: ${vuln.cve}\n`;
+    if (component.licenses && component.licenses.length > 0) {
+      output += `   License: ${component.licenses.join(', ')}\n`;
+    }
+
+    if (component.description) {
+      output += `   Description: ${component.description}\n`;
+    }
+
+    if (component.properties && Object.keys(component.properties).length > 0) {
+      output += '   Properties:\n';
+      for (const [key, value] of Object.entries(component.properties)) {
+        output += `     • ${key}: ${value}\n`;
+      }
+    }
+
+    if (component.external_refs && component.external_refs.length > 0) {
+      output += '   References:\n';
+      for (const ref of component.external_refs) {
+        output += `     • ${ref.type}: ${ref.url}\n`;
       }
     }
   }
@@ -142,8 +137,8 @@ function formatComponent(component: MlComponent, detailed: boolean): string {
   return output;
 }
 
-function groupComponentsByType(components: MlComponent[]): Record<string, MlComponent[]> {
-  const groups: Record<string, MlComponent[]> = {};
+function groupComponentsByType(components: MLBOMComponent[]): Record<string, MLBOMComponent[]> {
+  const groups: Record<string, MLBOMComponent[]> = {};
 
   for (const component of components) {
     const existing = groups[component.type];
@@ -155,6 +150,15 @@ function groupComponentsByType(components: MlComponent[]): Record<string, MlComp
   }
 
   return groups;
+}
+
+function formatCompleteness(completeness: MlbomCompleteness): string {
+  let output = '📊 Data Sources:\n';
+  output += `   From topology analysis: ${completeness.from_topology}\n`;
+  output += `   From findings analysis: ${completeness.from_findings}\n`;
+  output += `   Topology nodes scanned: ${completeness.topology_nodes}\n`;
+  output += `   Security findings: ${completeness.findings_count}\n`;
+  return output;
 }
 
 // =============================================================================
@@ -215,134 +219,108 @@ async function mlbomHandler(rawArgs: Record<string, unknown>): Promise<ToolResul
     }
 
     // Step 2: Use scan_id to generate MLBOM
-    const response = await client.generateMlbom([], {
+    const response: MlbomResponse = await client.generateMlbom([], {
       format: args.format,
       includeVulnerabilities: args.include_vulnerabilities,
       scanId: scanResponse.scan_id,
     });
 
-    // If format is CycloneDX or SPDX, return the pre-formatted content
-    if (args.format !== 'json' && response.bomContent !== undefined) {
-      let output = '╔══════════════════════════════════════════════════════╗\n';
-      output += '║           📋 ML Bill of Materials (MLBOM)             ║\n';
-      output += '╚══════════════════════════════════════════════════════╝\n\n';
-
-      output += `📦 Format: ${args.format.toUpperCase()}\n`;
-      output += `📅 Generated: ${response.generatedAt}\n`;
-      output += `📊 Components: ${response.components.length}\n`;
-      output += `⚠️  Vulnerabilities: ${response.vulnerabilityCount}\n`;
-      output += `🔒 Risk Score: ${formatRiskScore(response.riskScore)}\n\n`;
-
-      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += `${args.format.toUpperCase()} Output:\n\n`;
-      output += '```' + (args.format === 'cyclonedx' ? 'json' : 'xml') + '\n';
-      output += response.bomContent + '\n';
-      output += '```\n';
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: output,
-          },
-        ],
-      };
-    }
-
-    // Build human-readable output for JSON format
+    // Build header
     let output = '╔══════════════════════════════════════════════════════╗\n';
     output += '║           📋 ML Bill of Materials (MLBOM)             ║\n';
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
-    output += `📦 Version: ${response.version}\n`;
-    output += `📅 Generated: ${response.generatedAt}\n`;
-    output += `📊 Total Components: ${response.components.length}\n`;
-    output += `⚠️  Total Vulnerabilities: ${response.vulnerabilityCount}\n`;
-    output += `🔒 Supply Chain Risk Score: ${formatRiskScore(response.riskScore)}\n\n`;
+    output += `📦 Format: ${response.format.toUpperCase()}\n`;
+    output += `📅 Generated: ${response.generated_at}\n`;
 
-    // Component summary by type
-    const groups = groupComponentsByType(response.components);
-    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+    if (response.report_id) {
+      output += `🔗 Report ID: ${response.report_id}\n`;
+    }
+
+    // Summary statistics
+    output += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     output += '📊 COMPONENT SUMMARY\n\n';
+    output += formatSummaryScore(response.summary) + '\n\n';
 
-    const typeOrder: MlComponent['type'][] = ['model', 'tool', 'data-source', 'framework', 'dependency'];
-    for (const type of typeOrder) {
-      const components = groups[type];
-      if (components !== undefined && components.length > 0) {
-        output += `${formatComponentType(type)}: ${components.length}\n`;
+    if (response.summary.total_components > 0) {
+      if (response.summary.models > 0) {
+        output += `   🧠 Models: ${response.summary.models}\n`;
+      }
+      if (response.summary.frameworks > 0) {
+        output += `   📦 Frameworks: ${response.summary.frameworks}\n`;
+      }
+      if (response.summary.tools > 0) {
+        output += `   🔧 Tools: ${response.summary.tools}\n`;
+      }
+      if (response.summary.data_sources > 0) {
+        output += `   💾 Data Sources: ${response.summary.data_sources}\n`;
+      }
+      if (response.summary.dependencies > 0) {
+        output += `   📚 Dependencies: ${response.summary.dependencies}\n`;
       }
     }
-    output += '\n';
 
-    // Detailed component list
-    if (response.components.length > 0) {
-      // Models first (most important)
-      if (groups.model !== undefined && groups.model.length > 0) {
-        output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-        output += '🧠 MODELS\n\n';
-        for (const component of groups.model) {
-          output += formatComponent(component, true) + '\n';
-        }
-      }
+    // Warning if applicable
+    if (response.warning) {
+      output += '\n⚠️  WARNING: ' + response.warning + '\n';
+    }
 
-      // Tools
-      if (groups.tool !== undefined && groups.tool.length > 0) {
-        output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-        output += '🔧 TOOLS\n\n';
-        for (const component of groups.tool) {
-          output += formatComponent(component, true) + '\n';
-        }
-      }
+    // Completeness metrics if available
+    if (response.completeness) {
+      output += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += formatCompleteness(response.completeness);
+    }
 
-      // Data sources
-      if (groups['data-source'] !== undefined && groups['data-source'].length > 0) {
-        output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-        output += '💾 DATA SOURCES\n\n';
-        for (const component of groups['data-source']) {
-          output += formatComponent(component, true) + '\n';
-        }
-      }
+    // Handle different output formats
+    if (args.format !== 'json' && response.bom) {
+      // CycloneDX or SPDX format - show the structured BOM
+      output += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += `${args.format.toUpperCase()} Output:\n\n`;
+      output += '```json\n';
+      output += typeof response.bom === 'string'
+        ? response.bom
+        : JSON.stringify(response.bom, null, 2);
+      output += '\n```\n';
+    } else if (response.components && response.components.length > 0) {
+      // JSON format with detailed component list
+      const groups = groupComponentsByType(response.components);
+      const typeOrder: ComponentType[] = ['model', 'tool', 'data-source', 'framework', 'dependency'];
 
-      // Frameworks
-      if (groups.framework !== undefined && groups.framework.length > 0) {
-        output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-        output += '📦 FRAMEWORKS\n\n';
-        for (const component of groups.framework) {
-          output += formatComponent(component, false) + '\n';
-        }
-      }
+      for (const type of typeOrder) {
+        const components = groups[type];
+        if (components && components.length > 0) {
+          output += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
-      // Dependencies (less detailed)
-      if (groups.dependency !== undefined && groups.dependency.length > 0) {
-        output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-        output += '📚 DEPENDENCIES\n\n';
+          switch (type) {
+            case 'model':
+              output += '🧠 MODELS\n\n';
+              break;
+            case 'tool':
+              output += '🔧 TOOLS\n\n';
+              break;
+            case 'data-source':
+              output += '💾 DATA SOURCES\n\n';
+              break;
+            case 'framework':
+              output += '📦 FRAMEWORKS\n\n';
+              break;
+            case 'dependency':
+              output += '📚 DEPENDENCIES\n\n';
+              break;
+          }
 
-        // Only show vulnerable dependencies in detail
-        const vulnerableDeps = groups.dependency.filter(
-          (d) => d.vulnerabilities !== undefined && d.vulnerabilities.length > 0
-        );
-        const safeDeps = groups.dependency.filter(
-          (d) => d.vulnerabilities === undefined || d.vulnerabilities.length === 0
-        );
-
-        if (vulnerableDeps.length > 0) {
-          output += '⚠️  Vulnerable Dependencies:\n\n';
-          for (const component of vulnerableDeps) {
-            output += formatComponent(component, true) + '\n';
+          // Show detailed info for models/tools, compact for dependencies
+          const showDetailed = type === 'model' || type === 'tool' || type === 'data-source';
+          for (const component of components) {
+            output += formatComponent(component, showDetailed) + '\n';
           }
         }
-
-        if (safeDeps.length > 0) {
-          output += 'Other Dependencies: ';
-          output += safeDeps.map((d) => `${d.name}${d.version !== undefined ? `@${d.version}` : ''}`).join(', ');
-          output += '\n';
-        }
       }
     }
 
-    // Footer with export hint
+    // Footer
     output += '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
-    output += '💡 TIP: Use format="cyclonedx" or format="spdx" for standard export\n';
+    output += '💡 TIP: Use format="cyclonedx" for SBOM compliance tooling\n';
     output += 'MLBOM generation powered by Inkog AI Security Platform\n';
     output += 'Learn more: https://inkog.io/mlbom\n';
 
@@ -424,7 +402,7 @@ export const mlbomTool: ToolDefinition = {
   tool: {
     name: 'inkog_generate_mlbom',
     description:
-      'Generate a Machine Learning Bill of Materials (MLBOM) for AI agents. Lists all models, tools, data sources, frameworks, and dependencies with known vulnerabilities. Supports CycloneDX and SPDX formats for supply chain compliance.',
+      'Generate a Machine Learning Bill of Materials (MLBOM) for AI agents. Lists all models, tools, data sources, frameworks, and dependencies. Supports CycloneDX and SPDX formats for supply chain compliance.',
     inputSchema: {
       type: 'object',
       properties: {

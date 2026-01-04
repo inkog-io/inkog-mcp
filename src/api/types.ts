@@ -96,53 +96,51 @@ export interface ScanResponse {
     low: number;
   };
   findings?: Finding[];
-  governance?: GovernanceResult;
+  governance?: GovernanceVerifyResponse;
 }
 
 // =============================================================================
 // Governance Types
 // =============================================================================
 
-export interface ArticleStatus {
-  article: string;
-  status: 'PASS' | 'FAIL' | 'PARTIAL';
-  description: string;
-  findingCount: number;
-}
-
-export interface FrameworkStatus {
-  framework: string;
-  status: 'PASS' | 'FAIL' | 'PARTIAL';
-  items: string[];
-  findingCount: number;
-}
-
-export interface GovernanceResult {
-  governanceScore: number;
-  euAiActReadiness: 'READY' | 'PARTIAL' | 'NOT_READY';
-  articleMapping: Record<string, ArticleStatus>;
-  frameworkMapping: Record<string, FrameworkStatus>;
+export interface DeclaredCapability {
+  name: string;
+  constraint_type: string; // e.g., "ConstraintNoWrite", "ConstraintReadOnly"
+  status: string; // "valid", "violated", "unverified"
+  line?: number;
+  description?: string;
 }
 
 export interface GovernanceMismatch {
-  declared: string;
+  capability: string;
+  expected: string;
   actual: string;
+  severity: string;
   file: string;
   line: number;
-  severity: Severity;
-  description: string;
+  evidence?: string;
+}
+
+export interface GovernanceVerifySummary {
+  total_declarations: number;
+  valid_declarations: number;
+  violated_constraints: number;
+  unverified_items: number;
+  files_analyzed: number;
 }
 
 export interface GovernanceVerifyResponse {
   success: boolean;
-  hasAgentsMd: boolean;
-  agentsMdPath?: string;
+  overall_status: string; // "valid", "invalid", "partial"
+  score: number; // 0-100 governance alignment score
+  declared_capabilities: DeclaredCapability[];
   mismatches: GovernanceMismatch[];
-  declaredCapabilities: string[];
-  declaredLimitations: string[];
-  declaredTools: string[];
-  complianceScore: number;
-  recommendation?: string;
+  recommendations: string[];
+  summary?: GovernanceVerifySummary;
+
+  // Legacy compatibility aliases (computed from above fields)
+  hasAgentsMd?: boolean;
+  complianceScore?: number;
 }
 
 // =============================================================================
@@ -150,28 +148,68 @@ export interface GovernanceVerifyResponse {
 // =============================================================================
 
 export interface ComplianceReportRequest {
-  files: { path: string; content: string }[];
-  framework: ComplianceFramework | 'all';
-  format: 'markdown' | 'json' | 'pdf';
+  scan_id?: string;
+  frameworks: ComplianceFramework[];
+  format?: 'markdown' | 'json' | 'pdf';
+  organization?: string;
+  path?: string;
 }
 
 export interface ComplianceArticle {
   id: string;
   title: string;
-  status: 'COMPLIANT' | 'NON_COMPLIANT' | 'PARTIAL' | 'NOT_APPLICABLE';
-  findings: Finding[];
-  recommendations: string[];
+  status: string; // "compliant", "partial", "non-compliant"
+  score: number; // 0-100
+  requirements: string[];
+  findings: string[]; // Finding IDs
+  evidence?: string;
+  remediation?: string;
+}
+
+export interface ComplianceCategory {
+  id: string;
+  name: string;
+  status: string; // "pass", "partial", "fail"
+  finding_ids: string[];
+  description: string;
+  impact?: string;
+}
+
+export interface ComplianceFindingsSummary {
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface ComplianceRecommendation {
+  priority: string;
+  category: string;
+  title: string;
+  description: string;
+  article?: string;
+  effort?: string;
 }
 
 export interface ComplianceReportResponse {
   success: boolean;
   framework: ComplianceFramework;
-  overallStatus: 'COMPLIANT' | 'NON_COMPLIANT' | 'PARTIAL';
-  complianceScore: number;
-  articles: ComplianceArticle[];
-  executiveSummary: string;
-  generatedAt: string;
-  reportContent?: string; // For markdown/pdf format
+  overall_score: number; // 0-100
+  risk_level: string; // "low", "medium", "high", "critical"
+  report_id: string;
+  generated_at: string;
+  organization?: string;
+  scan_id?: string;
+  articles?: ComplianceArticle[];
+  categories?: ComplianceCategory[];
+  findings_summary: ComplianceFindingsSummary;
+  recommendations: ComplianceRecommendation[];
+  markdown_report?: string;
+
+  // Legacy compatibility
+  complianceScore?: number;
+  overallStatus?: string;
 }
 
 // =============================================================================
@@ -183,31 +221,49 @@ export interface ExplainRequest {
   pattern?: string;
 }
 
-export interface RemediationStep {
-  order: number;
-  description: string;
-  codeExample?: string;
-  language?: string;
+export interface CodeExamples {
+  vulnerable: string;
+  secure: string;
+}
+
+export interface ExplainReference {
+  title: string;
+  url: string;
+}
+
+export interface ExplainComplianceMapping {
+  eu_ai_act?: string[];
+  nist_ai_rmf?: string[];
+  owasp_llm_top_10?: string[];
+  iso_42001?: string[];
+  soc2?: string[];
+  owasp_agentic?: string[];
+  palo_alto?: string[];
+  mitre_attack?: string[];
 }
 
 export interface ExplainResponse {
   success: boolean;
-  pattern: string;
+  pattern_id: string;
   title: string;
+  severity: string;
+  category: string;
   description: string;
-  severity: Severity;
-  cwe?: string;
-  owaspLlm?: string;
-  riskTier: RiskTier;
-  explanation: string;
   impact: string;
-  remediationSteps: RemediationStep[];
-  references: string[];
-  codeExamples?: {
-    vulnerable: string;
-    secure: string;
-    language: string;
-  };
+  financial_risk?: string;
+  examples?: CodeExamples;
+  remediation: string;
+  remediation_steps: string[];
+  cwe: string[];
+  cvss: number;
+  owasp?: string[];
+  compliance_frameworks?: ExplainComplianceMapping;
+  references?: ExplainReference[];
+
+  // Legacy compatibility aliases
+  pattern?: string;
+  cweId?: string;
+  riskTier?: RiskTier;
 }
 
 // =============================================================================
@@ -216,129 +272,240 @@ export interface ExplainResponse {
 
 export interface McpServerInfo {
   name: string;
-  displayName?: string;
+  version?: string;
   description?: string;
-  repository: string;
-  homepage?: string;
+  repository?: string;
+  author?: string;
   license?: string;
-  tools: string[];
-  resources?: string[];
+  registry_url?: string;
+  verified?: boolean;
 }
 
-export interface McpSecurityIssue {
-  severity: Severity;
-  category: string;
+export interface McpAuditResults {
+  overall_risk: string; // "critical", "high", "medium", "low"
+  security_score: number; // 0-100
+  tool_count: number;
+  resource_count: number;
+  findings_count: number;
+  critical_count: number;
+  high_count: number;
+  files_analyzed: number;
+  lines_of_code: number;
+  analysis_duration: string;
+}
+
+export interface McpFinding {
+  id: string;
+  pattern_id: string;
   title: string;
+  severity: string;
   description: string;
   file?: string;
   line?: number;
-  recommendation: string;
+  code_snippet?: string;
+  remediation: string;
+  tool_name?: string;
+  resource_name?: string;
+}
+
+export interface McpPermissions {
+  file_access: boolean;
+  network_access: boolean;
+  code_execution: boolean;
+  database_access: boolean;
+  environment_access: boolean;
+  file_system_paths?: string[];
+  network_hosts?: string[];
+  execution_types?: string[];
+  scope: string; // "minimal", "moderate", "extensive", "unrestricted"
+}
+
+export interface McpToolAnalysis {
+  name: string;
+  description?: string;
+  risk_level: string; // "safe", "moderate", "dangerous"
+  risk_reasons?: string[];
+  input_schema?: unknown;
+  output_schema?: unknown;
+  has_input_validation: boolean;
+  has_rate_limiting: boolean;
+  has_access_control: boolean;
+  attack_vectors?: string[];
+  finding_ids?: string[];
 }
 
 export interface McpAuditResponse {
   success: boolean;
-  serverInfo: McpServerInfo;
-  securityScore: number;
-  issues: McpSecurityIssue[];
-  toolPermissions: Record<
-    string,
-    {
-      reads: string[];
-      writes: string[];
-      executes: string[];
-      network: string[];
-    }
-  >;
-  dataFlowRisks: string[];
+  server: McpServerInfo;
+  audit_results: McpAuditResults;
+  findings: McpFinding[];
+  permissions: McpPermissions;
+  tools: McpToolAnalysis[];
   recommendations: string[];
+  report_id?: string;
+  generated_at: string;
+
+  // Data source transparency
+  data_source?: 'registry' | 'known_servers';
+  cache_warning?: string;
+
+  // Legacy compatibility
+  serverInfo?: McpServerInfo;
+  securityScore?: number;
+  issues?: McpFinding[];
 }
 
 // =============================================================================
 // MLBOM Types (Machine Learning Bill of Materials)
 // =============================================================================
 
-export interface MlComponent {
-  type: 'model' | 'tool' | 'data-source' | 'framework' | 'dependency';
-  name: string;
-  version?: string;
-  provider?: string;
-  license?: string;
-  location: string;
-  line?: number;
-  properties?: Record<string, string>;
-  vulnerabilities?: MlVulnerability[];
+export interface MLBOMSummary {
+  total_components: number;
+  models: number;
+  frameworks: number;
+  tools: number;
+  dependencies: number;
+  data_sources: number;
 }
 
-export interface MlVulnerability {
-  id: string;
-  severity: Severity;
-  description: string;
-  cve?: string;
-  advisory?: string;
+export interface MLBOMSupplier {
+  name: string;
+  url?: string;
+  contact?: string;
+}
+
+export interface MLBOMExternalRef {
+  type: string; // "purl", "website", "documentation"
+  url: string;
+}
+
+export interface MLBOMComponent {
+  type: string; // "model", "framework", "tool", "dependency", "data-source"
+  name: string;
+  version?: string;
+  supplier?: MLBOMSupplier;
+  description?: string;
+  licenses?: string[];
+  external_refs?: MLBOMExternalRef[];
+  properties?: Record<string, string>;
+}
+
+export interface MlbomCompleteness {
+  from_topology: number;
+  from_findings: number;
+  topology_nodes: number;
+  findings_count: number;
 }
 
 export interface MlbomResponse {
   success: boolean;
   format: MlbomFormat;
-  version: string;
-  generatedAt: string;
-  components: MlComponent[];
-  vulnerabilityCount: number;
-  riskScore: number;
-  bomContent?: string; // For CycloneDX/SPDX format
+  bom: unknown; // CycloneDX or SPDX structure
+  summary: MLBOMSummary;
+  report_id?: string;
+  generated_at: string;
+
+  // Completeness tracking
+  completeness?: MlbomCompleteness;
+  warning?: string;
+
+  // Legacy compatibility
+  components?: MLBOMComponent[];
+  version?: string;
+  generatedAt?: string;
 }
 
 // =============================================================================
 // A2A (Agent-to-Agent) Audit Types
 // =============================================================================
 
-export type A2AProtocol = 'a2a' | 'crewai' | 'langgraph' | 'auto-detect';
+export type A2AProtocol = 'a2a' | 'crewai' | 'langgraph' | 'autogen' | 'custom' | 'unknown';
 
-export interface AgentDefinition {
+export interface A2AAgent {
   id: string;
   name: string;
   role?: string;
+  description?: string;
   tools: string[];
-  permissions: string[];
-  file: string;
-  line: number;
+  delegation_targets: string[];
+  file?: string;
+  line?: number;
+  can_delegate: boolean;
+  can_receive_message: boolean;
+  has_memory: boolean;
+  has_auth_check: boolean;
+  has_rate_limiting: boolean;
+  trust_level?: string;
 }
 
-export interface DelegationEdge {
+export interface A2ACommunication {
   from: string;
   to: string;
-  type: 'delegate' | 'handoff' | 'spawn';
-  file: string;
-  line: number;
-  hasGuards: boolean;
+  type: string; // "delegation", "message", "task", "broadcast"
+  has_guards: boolean;
+  has_auth: boolean;
+  is_async: boolean;
+  max_depth?: number;
+  file?: string;
+  line?: number;
 }
 
-export interface A2ASecurityIssue {
-  severity: Severity;
-  category:
-    | 'infinite-delegation'
-    | 'privilege-escalation'
-    | 'data-leakage'
-    | 'unauthorized-handoff'
-    | 'missing-guards';
-  title: string;
+export interface A2AFinding {
+  id: string;
+  type: string; // "infinite-delegation", "missing-auth", "privilege-escalation"
+  severity: string;
   description: string;
-  agents: string[];
-  file: string;
-  line: number;
-  recommendation: string;
+  agents_involved: string[];
+  file?: string;
+  line?: number;
+  remediation: string;
+}
+
+export interface A2ATrustBoundary {
+  id: string;
+  name: string;
+  trust_level: string;
+  agent_ids: string[];
+  description?: string;
+}
+
+export interface A2ATrustAnalysis {
+  trust_boundaries: A2ATrustBoundary[];
+  cross_boundary_flows: number;
+  unguarded_delegations: number;
+  privilege_escalations: number;
+  circular_delegations?: string[][];
+}
+
+export interface A2ARiskAssessment {
+  overall_risk: string;
+  trust_boundary_violations: number;
+  unguarded_delegations: number;
+  critical_findings: number;
+  high_findings: number;
+  summary: string;
+  recommendations: string[];
 }
 
 export interface A2AAuditResponse {
   success: boolean;
   protocol: A2AProtocol;
-  agents: AgentDefinition[];
-  delegationGraph: DelegationEdge[];
-  issues: A2ASecurityIssue[];
-  securityScore: number;
-  hasCycles: boolean;
-  maxDelegationDepth: number;
-  recommendations: string[];
+  agents: A2AAgent[];
+  communications: A2ACommunication[];
+  findings: A2AFinding[];
+  trust_analysis: A2ATrustAnalysis;
+  risk_assessment: A2ARiskAssessment;
+  report_id?: string;
+  generated_at: string;
+
+  // Warnings for incomplete analysis
+  warning?: string;
+
+  // Legacy compatibility
+  delegationGraph?: A2ACommunication[];
+  issues?: A2AFinding[];
+  securityScore?: number;
+  hasCycles?: boolean;
 }
 
 // =============================================================================

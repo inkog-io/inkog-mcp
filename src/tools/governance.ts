@@ -21,7 +21,7 @@ import {
   InkogNetworkError,
   InkogRateLimitError,
 } from '../api/client.js';
-import type { GovernanceMismatch } from '../api/types.js';
+import type { DeclaredCapability, GovernanceMismatch } from '../api/types.js';
 import { findAgentsMd, getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
@@ -39,35 +39,84 @@ type GovernanceArgs = z.infer<typeof GovernanceArgsSchema>;
 // Helpers
 // =============================================================================
 
-function formatMismatch(mismatch: GovernanceMismatch): string {
-  const icon =
-    mismatch.severity === 'CRITICAL'
-      ? '🔴'
-      : mismatch.severity === 'HIGH'
-        ? '🟠'
-        : mismatch.severity === 'MEDIUM'
-          ? '🟡'
-          : '🟢';
+function formatSeverityIcon(severity: string): string {
+  const upper = severity.toUpperCase();
+  switch (upper) {
+    case 'CRITICAL':
+      return '🔴';
+    case 'HIGH':
+      return '🟠';
+    case 'MEDIUM':
+      return '🟡';
+    case 'LOW':
+      return '🟢';
+    default:
+      return '⚪';
+  }
+}
 
-  let output = `${icon} GOVERNANCE MISMATCH\n`;
+function formatMismatch(mismatch: GovernanceMismatch): string {
+  const icon = formatSeverityIcon(mismatch.severity);
+
+  let output = `${icon} GOVERNANCE MISMATCH [${mismatch.severity.toUpperCase()}]\n`;
   output += `   📍 ${mismatch.file}:${mismatch.line}\n`;
-  output += `   📜 Declared: "${mismatch.declared}"\n`;
+  output += `   🎯 Capability: ${mismatch.capability}\n`;
+  output += `   📜 Expected: "${mismatch.expected}"\n`;
   output += `   ⚠️  Actual: "${mismatch.actual}"\n`;
-  output += `   💬 ${mismatch.description}`;
+
+  if (mismatch.evidence) {
+    output += `   📝 Evidence: ${mismatch.evidence}\n`;
+  }
 
   return output;
 }
 
-function formatCapabilityList(items: string[], title: string, icon: string): string {
-  if (items.length === 0) {
-    return '';
+function formatCapability(cap: DeclaredCapability): string {
+  const statusIcon = cap.status === 'valid' ? '✅' :
+                     cap.status === 'violated' ? '❌' : '⚪';
+
+  let output = `${statusIcon} ${cap.name}`;
+  if (cap.constraint_type) {
+    output += ` [${cap.constraint_type}]`;
+  }
+  output += '\n';
+
+  if (cap.description) {
+    output += `      ${cap.description}\n`;
   }
 
-  let output = `${icon} ${title}:\n`;
-  for (const item of items) {
-    output += `   • ${item}\n`;
+  if (cap.line) {
+    output += `      Line: ${cap.line}\n`;
   }
-  return output + '\n';
+
+  return output;
+}
+
+function formatScore(score: number): string {
+  if (score >= 90) {
+    return `✅ ${score}/100 (Excellent)`;
+  } else if (score >= 70) {
+    return `🟢 ${score}/100 (Good)`;
+  } else if (score >= 50) {
+    return `🟡 ${score}/100 (Fair)`;
+  } else if (score >= 30) {
+    return `🟠 ${score}/100 (Poor)`;
+  } else {
+    return `🔴 ${score}/100 (Critical)`;
+  }
+}
+
+function formatOverallStatus(status: string): string {
+  switch (status.toLowerCase()) {
+    case 'valid':
+      return '✅ Valid';
+    case 'invalid':
+      return '❌ Invalid';
+    case 'partial':
+      return '⚠️  Partial';
+    default:
+      return status;
+  }
 }
 
 // =============================================================================
@@ -139,8 +188,9 @@ async function governanceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
     // AGENTS.md status
-    if (response.hasAgentsMd) {
-      output += `✅ AGENTS.md found: ${response.agentsMdPath ?? agentsMdPath ?? 'AGENTS.md'}\n\n`;
+    const hasAgentsMd = response.hasAgentsMd ?? (agentsMdPath !== null);
+    if (hasAgentsMd) {
+      output += `✅ AGENTS.md found: ${agentsMdPath ?? 'AGENTS.md'}\n\n`;
     } else {
       output += '⚠️  No AGENTS.md file found\n\n';
       output +=
@@ -155,39 +205,85 @@ async function governanceHandler(rawArgs: Record<string, unknown>): Promise<Tool
         'Learn more: https://docs.inkog.io/governance/agents-md\n\n';
     }
 
-    // Compliance score
-    output += `📊 Governance Score: ${response.complianceScore}/100\n\n`;
+    // Overall status and score
+    output += `📊 Status: ${formatOverallStatus(response.overall_status)}\n`;
+    output += `📈 Governance Score: ${formatScore(response.score)}\n\n`;
 
-    // Declared capabilities, limitations, tools
-    if (response.hasAgentsMd) {
+    // Summary if available
+    if (response.summary) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '📜 DECLARED GOVERNANCE\n\n';
+      output += '📊 SUMMARY\n\n';
+      output += `   Total declarations: ${response.summary.total_declarations}\n`;
+      output += `   ✅ Valid: ${response.summary.valid_declarations}\n`;
+      output += `   ❌ Violated: ${response.summary.violated_constraints}\n`;
+      output += `   ⚪ Unverified: ${response.summary.unverified_items}\n`;
+      output += `   📁 Files analyzed: ${response.summary.files_analyzed}\n\n`;
+    }
 
-      output += formatCapabilityList(response.declaredCapabilities, 'Capabilities', '✅');
-      output += formatCapabilityList(response.declaredLimitations, 'Limitations', '🚫');
-      output += formatCapabilityList(response.declaredTools, 'Tools', '🔧');
+    // Declared capabilities
+    const declaredCaps = response.declared_capabilities ?? [];
+    if (declaredCaps.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '📜 DECLARED CAPABILITIES\n\n';
+
+      // Group by status
+      const valid = declaredCaps.filter((c) => c.status === 'valid');
+      const violated = declaredCaps.filter((c) => c.status === 'violated');
+      const unverified = declaredCaps.filter((c) => c.status === 'unverified');
+
+      if (violated.length > 0) {
+        output += '❌ VIOLATED:\n\n';
+        for (const cap of violated) {
+          output += formatCapability(cap);
+        }
+        output += '\n';
+      }
+
+      if (unverified.length > 0) {
+        output += '⚪ UNVERIFIED:\n\n';
+        for (const cap of unverified) {
+          output += formatCapability(cap);
+        }
+        output += '\n';
+      }
+
+      if (valid.length > 0) {
+        output += '✅ VALID:\n\n';
+        for (const cap of valid) {
+          output += `   ${cap.name}`;
+          if (cap.constraint_type) {
+            output += ` [${cap.constraint_type}]`;
+          }
+          output += '\n';
+        }
+        output += '\n';
+      }
     }
 
     // Mismatches
-    if (response.mismatches.length > 0) {
+    const mismatches = response.mismatches ?? [];
+    if (mismatches.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += `⚠️  GOVERNANCE MISMATCHES (${response.mismatches.length})\n\n`;
+      output += `⚠️  GOVERNANCE MISMATCHES (${mismatches.length})\n\n`;
       output += 'The following code behaviors do not match AGENTS.md declarations:\n\n';
 
-      for (const mismatch of response.mismatches) {
-        output += formatMismatch(mismatch) + '\n\n';
+      for (const mismatch of mismatches) {
+        output += formatMismatch(mismatch) + '\n';
       }
-    } else if (response.hasAgentsMd) {
+    } else if (hasAgentsMd) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '✅ No governance mismatches detected!\n\n';
       output += 'Your agent code aligns with its AGENTS.md declarations.\n\n';
     }
 
     // Recommendations
-    if (response.recommendation !== undefined) {
+    const recommendations = response.recommendations ?? [];
+    if (recommendations.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '💡 RECOMMENDATION\n\n';
-      output += response.recommendation + '\n';
+      output += '💡 RECOMMENDATIONS\n\n';
+      for (let i = 0; i < recommendations.length; i++) {
+        output += `${i + 1}. ${recommendations[i]}\n`;
+      }
     }
 
     // Footer

@@ -63,18 +63,7 @@ function formatSeverityBadge(severity: string): string {
   }
 }
 
-function formatRiskTier(tier: string): string {
-  switch (tier) {
-    case 'vulnerability':
-      return '🔴 Exploitable Vulnerability';
-    case 'risk_pattern':
-      return '🟠 Risk Pattern';
-    case 'hardening':
-      return '🟡 Hardening Recommendation';
-    default:
-      return tier;
-  }
-}
+// formatRiskTier removed - now using response.category directly
 
 // =============================================================================
 // Handler
@@ -116,15 +105,17 @@ async function explainHandler(rawArgs: Record<string, unknown>): Promise<ToolRes
 
     // Title and metadata
     output += `🔍 ${response.title}\n`;
-    output += `   Pattern: ${response.pattern}\n`;
+    output += `   Pattern: ${response.pattern_id}\n`;
     output += `   Severity: ${formatSeverityBadge(response.severity)}\n`;
-    output += `   Category: ${formatRiskTier(response.riskTier)}\n`;
+    output += `   Category: ${response.category}\n`;
 
-    if (response.cwe !== undefined) {
-      output += `   CWE: ${response.cwe}\n`;
+    // CWE - backend sends as array
+    if (response.cwe !== undefined && response.cwe.length > 0) {
+      output += `   CWE: ${response.cwe.join(', ')}\n`;
     }
-    if (response.owaspLlm !== undefined) {
-      output += `   OWASP LLM: ${response.owaspLlm}\n`;
+    // OWASP - backend sends as array
+    if (response.owasp !== undefined && response.owasp.length > 0) {
+      output += `   OWASP LLM: ${response.owasp.join(', ')}\n`;
     }
 
     output += '\n';
@@ -134,46 +125,48 @@ async function explainHandler(rawArgs: Record<string, unknown>): Promise<ToolRes
     output += '📝 DESCRIPTION\n\n';
     output += response.description + '\n\n';
 
-    // Explanation
-    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    output += '🔬 WHY THIS IS DANGEROUS\n\n';
-    output += response.explanation + '\n\n';
-
     // Impact
-    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    output += '💥 POTENTIAL IMPACT\n\n';
-    output += response.impact + '\n\n';
-
-    // Remediation steps
-    output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-    output += '🔧 HOW TO FIX\n\n';
-
-    for (const step of response.remediationSteps) {
-      output += `${step.order}. ${step.description}\n`;
-      if (step.codeExample !== undefined) {
-        const lang = step.language ?? '';
-        output += `\n\`\`\`${lang}\n${step.codeExample}\n\`\`\`\n\n`;
-      }
+    if (response.impact) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '💥 POTENTIAL IMPACT\n\n';
+      output += response.impact + '\n\n';
     }
 
-    // Code examples
-    if (response.codeExamples !== undefined) {
+    // Remediation
+    if (response.remediation) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '🔧 HOW TO FIX\n\n';
+      output += response.remediation + '\n\n';
+    }
+
+    // Remediation steps - backend sends as string[]
+    if (response.remediation_steps && response.remediation_steps.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '📋 REMEDIATION STEPS\n\n';
+      for (let i = 0; i < response.remediation_steps.length; i++) {
+        output += `${i + 1}. ${response.remediation_steps[i]}\n`;
+      }
+      output += '\n';
+    }
+
+    // Code examples - backend sends as examples: { vulnerable, secure }
+    if (response.examples !== undefined) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '📝 CODE EXAMPLES\n\n';
 
       output += '❌ Vulnerable:\n';
-      output += `\`\`\`${response.codeExamples.language}\n${response.codeExamples.vulnerable}\n\`\`\`\n\n`;
+      output += `\`\`\`\n${response.examples.vulnerable}\n\`\`\`\n\n`;
 
       output += '✅ Secure:\n';
-      output += `\`\`\`${response.codeExamples.language}\n${response.codeExamples.secure}\n\`\`\`\n\n`;
+      output += `\`\`\`\n${response.examples.secure}\n\`\`\`\n\n`;
     }
 
-    // References
-    if (response.references.length > 0) {
+    // References - backend sends as { title, url }[]
+    if (response.references !== undefined && response.references.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '📚 REFERENCES\n\n';
       for (const ref of response.references) {
-        output += `• ${ref}\n`;
+        output += `• ${ref.title}: ${ref.url}\n`;
       }
     }
 

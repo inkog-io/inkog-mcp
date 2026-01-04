@@ -26,10 +26,10 @@ import {
   InkogRateLimitError,
 } from '../api/client.js';
 import type {
-  A2ASecurityIssue,
-  AgentDefinition,
-  DelegationEdge,
-  Severity,
+  A2AAgent,
+  A2ACommunication,
+  A2AFinding,
+  A2AProtocol,
 } from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
@@ -41,10 +41,9 @@ import type { ToolDefinition, ToolResult } from './index.js';
 const A2AArgsSchema = z.object({
   path: z.string().describe('Path to multi-agent system codebase'),
   protocol: z
-    .enum(['a2a', 'crewai', 'langgraph', 'auto-detect'])
+    .enum(['a2a', 'crewai', 'langgraph', 'autogen', 'custom', 'unknown'])
     .optional()
-    .default('auto-detect')
-    .describe('Multi-agent protocol: a2a (Google), crewai, langgraph, or auto-detect'),
+    .describe('Multi-agent protocol hint: a2a (Google), crewai, langgraph, autogen, or leave empty for auto-detect'),
   check_delegation_chains: z
     .boolean()
     .optional()
@@ -58,8 +57,9 @@ type A2AArgs = z.infer<typeof A2AArgsSchema>;
 // Helpers
 // =============================================================================
 
-function formatSeverityIcon(severity: Severity): string {
-  switch (severity) {
+function formatSeverityIcon(severity: string): string {
+  const upper = severity.toUpperCase();
+  switch (upper) {
     case 'CRITICAL':
       return '🔴';
     case 'HIGH':
@@ -73,7 +73,7 @@ function formatSeverityIcon(severity: Severity): string {
   }
 }
 
-function formatProtocol(protocol: string): string {
+function formatProtocol(protocol: A2AProtocol | string): string {
   switch (protocol) {
     case 'a2a':
       return 'Google A2A Protocol';
@@ -81,65 +81,98 @@ function formatProtocol(protocol: string): string {
       return 'CrewAI';
     case 'langgraph':
       return 'LangGraph';
-    case 'auto-detect':
-      return 'Auto-detected';
+    case 'autogen':
+      return 'Microsoft AutoGen';
+    case 'custom':
+      return 'Custom Protocol';
+    case 'unknown':
+      return 'Unknown (auto-detect failed)';
     default:
       return protocol;
   }
 }
 
-function formatSecurityScore(score: number): string {
-  if (score >= 90) {
-    return `✅ ${score}/100 (Excellent)`;
-  } else if (score >= 70) {
-    return `🟢 ${score}/100 (Good)`;
-  } else if (score >= 50) {
-    return `🟡 ${score}/100 (Fair)`;
-  } else if (score >= 30) {
-    return `🟠 ${score}/100 (Poor)`;
-  } else {
-    return `🔴 ${score}/100 (Critical)`;
+function formatRiskLevel(risk: string): string {
+  switch (risk.toLowerCase()) {
+    case 'critical':
+      return '🔴 Critical';
+    case 'high':
+      return '🟠 High';
+    case 'medium':
+      return '🟡 Medium';
+    case 'low':
+      return '🟢 Low';
+    case 'not_applicable':
+      return '⚪ N/A';
+    default:
+      return risk;
   }
 }
 
-function formatAgent(agent: AgentDefinition): string {
+function formatAgent(agent: A2AAgent): string {
   let output = `🤖 ${agent.name}`;
-  if (agent.role !== undefined) {
+  if (agent.role) {
     output += ` (${agent.role})`;
   }
   output += '\n';
-  output += `   📍 ${agent.file}:${agent.line}\n`;
+
+  if (agent.file) {
+    output += `   📍 ${agent.file}${agent.line ? `:${agent.line}` : ''}\n`;
+  }
 
   if (agent.tools.length > 0) {
     output += `   🔧 Tools: ${agent.tools.join(', ')}\n`;
   }
 
-  if (agent.permissions.length > 0) {
-    output += `   🔐 Permissions: ${agent.permissions.join(', ')}\n`;
+  if (agent.delegation_targets.length > 0) {
+    output += `   🔗 Can delegate to: ${agent.delegation_targets.join(', ')}\n`;
+  }
+
+  // Security properties
+  const securityProps: string[] = [];
+  if (agent.has_auth_check) securityProps.push('auth ✓');
+  if (agent.has_rate_limiting) securityProps.push('rate-limit ✓');
+  if (agent.has_memory) securityProps.push('memory');
+  if (securityProps.length > 0) {
+    output += `   🔐 Security: ${securityProps.join(', ')}\n`;
+  }
+
+  if (agent.trust_level) {
+    output += `   🛡️  Trust: ${agent.trust_level}\n`;
   }
 
   return output;
 }
 
-function formatDelegationEdge(edge: DelegationEdge): string {
-  const arrow = edge.type === 'spawn' ? '⟹' : edge.type === 'handoff' ? '→' : '⇢';
-  const guards = edge.hasGuards ? '🛡️' : '⚠️';
-  return `   ${edge.from} ${arrow} ${edge.to} [${edge.type}] ${guards}`;
+function formatCommunication(comm: A2ACommunication): string {
+  const arrow = comm.type === 'delegation' ? '⟹' : comm.type === 'task' ? '→' : '⇢';
+  const guards = comm.has_guards ? '🛡️' : '⚠️';
+  const auth = comm.has_auth ? '🔐' : '';
+  return `   ${comm.from} ${arrow} ${comm.to} [${comm.type}] ${guards}${auth}`;
 }
 
-function formatIssue(issue: A2ASecurityIssue): string {
-  const icon = formatSeverityIcon(issue.severity);
-  let output = `${icon} [${issue.severity}] ${issue.title}\n`;
-  output += `   Category: ${formatIssueCategory(issue.category)}\n`;
-  output += `   ${issue.description}\n`;
-  output += `   Agents: ${issue.agents.join(', ')}\n`;
-  output += `   📍 ${issue.file}:${issue.line}\n`;
-  output += `   💡 ${issue.recommendation}`;
+function formatFinding(finding: A2AFinding): string {
+  const icon = formatSeverityIcon(finding.severity);
+  let output = `${icon} [${finding.severity.toUpperCase()}] ${finding.type}\n`;
+  output += `   ${finding.description}\n`;
+
+  if (finding.agents_involved.length > 0) {
+    output += `   Agents: ${finding.agents_involved.join(', ')}\n`;
+  }
+
+  if (finding.file) {
+    output += `   📍 ${finding.file}${finding.line ? `:${finding.line}` : ''}\n`;
+  }
+
+  if (finding.remediation) {
+    output += `   💡 ${finding.remediation}`;
+  }
+
   return output;
 }
 
-function formatIssueCategory(category: A2ASecurityIssue['category']): string {
-  switch (category) {
+function formatFindingType(type: string): string {
+  switch (type) {
     case 'infinite-delegation':
       return '♾️  Infinite Delegation';
     case 'privilege-escalation':
@@ -150,13 +183,15 @@ function formatIssueCategory(category: A2ASecurityIssue['category']): string {
       return '🚫 Unauthorized Handoff';
     case 'missing-guards':
       return '🛡️  Missing Guards';
+    case 'missing-auth':
+      return '🔐 Missing Authentication';
     default:
-      return category;
+      return type;
   }
 }
 
-function renderDelegationGraph(agents: AgentDefinition[], edges: DelegationEdge[]): string {
-  if (agents.length === 0 || edges.length === 0) {
+function renderDelegationGraph(agents: A2AAgent[], communications: A2ACommunication[]): string {
+  if (agents.length === 0 || communications.length === 0) {
     return 'No delegation relationships detected.\n';
   }
 
@@ -165,31 +200,32 @@ function renderDelegationGraph(agents: AgentDefinition[], edges: DelegationEdge[
   // Simple ASCII graph representation
   const agentMap = new Map(agents.map((a) => [a.id, a.name]));
 
-  // Group edges by source agent
-  const edgesBySource = new Map<string, DelegationEdge[]>();
-  for (const edge of edges) {
-    if (!edgesBySource.has(edge.from)) {
-      edgesBySource.set(edge.from, []);
+  // Group communications by source agent
+  const commsBySource = new Map<string, A2ACommunication[]>();
+  for (const comm of communications) {
+    if (!commsBySource.has(comm.from)) {
+      commsBySource.set(comm.from, []);
     }
-    edgesBySource.get(edge.from)!.push(edge);
+    commsBySource.get(comm.from)!.push(comm);
   }
 
-  // Render each agent and its outgoing edges
+  // Render each agent and its outgoing communications
   for (const agent of agents) {
-    const agentEdges = edgesBySource.get(agent.id) ?? [];
+    const agentComms = commsBySource.get(agent.id) ?? [];
     const name = agentMap.get(agent.id) ?? agent.id;
+    const displayName = name.length > 12 ? name.substring(0, 10) + '..' : name;
 
-    if (agentEdges.length === 0) {
+    if (agentComms.length === 0) {
       output += `   ┌──────────────┐\n`;
-      output += `   │ ${name.padEnd(12)} │\n`;
+      output += `   │ ${displayName.padEnd(12)} │\n`;
       output += `   └──────────────┘\n`;
     } else {
       output += `   ┌──────────────┐\n`;
-      output += `   │ ${name.padEnd(12)} │`;
+      output += `   │ ${displayName.padEnd(12)} │`;
 
-      agentEdges.forEach((edge, i) => {
-        const targetName = agentMap.get(edge.to) ?? edge.to;
-        const arrow = edge.hasGuards ? '──🛡️──>' : '──⚠️──>';
+      agentComms.forEach((comm, i) => {
+        const targetName = agentMap.get(comm.to) ?? comm.to;
+        const arrow = comm.has_guards ? '──🛡️──>' : '──⚠️──>';
 
         if (i === 0) {
           output += `${arrow} ${targetName}`;
@@ -263,42 +299,69 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     }
 
     // Step 2: Use scan_id to audit A2A
-    const response = await client.auditA2A([], {
-      protocol: args.protocol,
+    const a2aOptions: { protocol?: A2AProtocol; checkDelegationChains?: boolean; scanId?: string } = {
       checkDelegationChains: args.check_delegation_chains,
       scanId: scanResponse.scan_id,
-    });
+    };
+    if (args.protocol) {
+      a2aOptions.protocol = args.protocol;
+    }
+    const response = await client.auditA2A([], a2aOptions);
 
     // Build formatted output
     let output = '╔══════════════════════════════════════════════════════╗\n';
     output += '║        🤖 Agent-to-Agent Security Audit               ║\n';
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
+    // Warning if topology is incomplete
+    if (response.warning) {
+      output += `⚠️  ${response.warning}\n\n`;
+    }
+
     // Overview
     output += `📡 Protocol: ${formatProtocol(response.protocol)}\n`;
     output += `🤖 Agents Detected: ${response.agents.length}\n`;
-    output += `🔗 Delegation Edges: ${response.delegationGraph.length}\n`;
-    output += `📊 Security Score: ${formatSecurityScore(response.securityScore)}\n\n`;
+    output += `🔗 Communication Channels: ${response.communications?.length ?? 0}\n`;
 
-    // Topology warnings
-    if (response.hasCycles) {
-      output += '⚠️  WARNING: Delegation cycles detected (potential infinite loops)\n';
-    }
-    if (response.maxDelegationDepth > 5) {
-      output += `⚠️  WARNING: Deep delegation chain detected (depth: ${response.maxDelegationDepth})\n`;
+    // Risk assessment
+    if (response.risk_assessment) {
+      output += `📊 Overall Risk: ${formatRiskLevel(response.risk_assessment.overall_risk)}\n`;
     }
     output += '\n';
 
-    // Issues summary
-    const critical = response.issues.filter((i) => i.severity === 'CRITICAL').length;
-    const high = response.issues.filter((i) => i.severity === 'HIGH').length;
-    const medium = response.issues.filter((i) => i.severity === 'MEDIUM').length;
-    const low = response.issues.filter((i) => i.severity === 'LOW').length;
+    // Trust analysis warnings
+    if (response.trust_analysis) {
+      const ta = response.trust_analysis;
+      if (ta.circular_delegations && ta.circular_delegations.length > 0) {
+        output += '⚠️  WARNING: Circular delegation chains detected (potential infinite loops)\n';
+        for (const cycle of ta.circular_delegations) {
+          output += `   Cycle: ${cycle.join(' → ')}\n`;
+        }
+        output += '\n';
+      }
+      if (ta.unguarded_delegations > 0) {
+        output += `⚠️  WARNING: ${ta.unguarded_delegations} unguarded delegation(s) detected\n`;
+      }
+      if (ta.privilege_escalations > 0) {
+        output += `⚠️  WARNING: ${ta.privilege_escalations} potential privilege escalation(s)\n`;
+      }
+      if (ta.cross_boundary_flows > 0) {
+        output += `ℹ️  ${ta.cross_boundary_flows} cross-trust-boundary flow(s) detected\n`;
+      }
+      output += '\n';
+    }
 
-    if (response.issues.length === 0) {
+    // Findings summary
+    const findings = response.findings ?? [];
+    if (findings.length === 0) {
       output += '✅ No multi-agent security issues detected!\n\n';
     } else {
-      output += `📋 Security Issues: ${response.issues.length}\n`;
+      const critical = findings.filter((f) => f.severity.toUpperCase() === 'CRITICAL').length;
+      const high = findings.filter((f) => f.severity.toUpperCase() === 'HIGH').length;
+      const medium = findings.filter((f) => f.severity.toUpperCase() === 'MEDIUM').length;
+      const low = findings.filter((f) => f.severity.toUpperCase() === 'LOW').length;
+
+      output += `📋 Security Issues: ${findings.length}\n`;
       output += `   🔴 Critical: ${critical} | 🟠 High: ${high} | 🟡 Medium: ${medium} | 🟢 Low: ${low}\n\n`;
     }
 
@@ -312,81 +375,71 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     }
 
     // Delegation graph visualization
-    if (response.delegationGraph.length > 0) {
+    const communications = response.communications ?? [];
+    if (communications.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🔗 DELEGATION GRAPH\n';
-      output += renderDelegationGraph(response.agents, response.delegationGraph);
+      output += renderDelegationGraph(response.agents, communications);
       output += '\n';
 
-      output += 'Delegation Edges:\n';
-      for (const edge of response.delegationGraph) {
-        output += formatDelegationEdge(edge) + '\n';
+      output += 'Communication Channels:\n';
+      for (const comm of communications) {
+        output += formatCommunication(comm) + '\n';
       }
       output += '\n';
-      output += 'Legend: 🛡️  = has permission guards, ⚠️  = no guards\n\n';
+      output += 'Legend: 🛡️  = has permission guards, ⚠️  = no guards, 🔐 = authenticated\n\n';
     }
 
-    // Detailed issues
-    if (response.issues.length > 0) {
+    // Detailed findings
+    if (findings.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
-      output += '🔍 SECURITY ISSUES\n\n';
+      output += '🔍 SECURITY FINDINGS\n\n';
 
-      // Group by category
-      const infiniteDelegation = response.issues.filter(
-        (i) => i.category === 'infinite-delegation'
-      );
-      const privilegeEscalation = response.issues.filter(
-        (i) => i.category === 'privilege-escalation'
-      );
-      const dataLeakage = response.issues.filter((i) => i.category === 'data-leakage');
-      const unauthorizedHandoff = response.issues.filter(
-        (i) => i.category === 'unauthorized-handoff'
-      );
-      const missingGuards = response.issues.filter((i) => i.category === 'missing-guards');
-
-      if (infiniteDelegation.length > 0) {
-        output += '♾️  INFINITE DELEGATION RISKS\n\n';
-        for (const issue of infiniteDelegation) {
-          output += formatIssue(issue) + '\n\n';
+      // Group by type
+      const groupedFindings = new Map<string, A2AFinding[]>();
+      for (const finding of findings) {
+        const type = finding.type;
+        if (!groupedFindings.has(type)) {
+          groupedFindings.set(type, []);
         }
+        groupedFindings.get(type)!.push(finding);
       }
 
-      if (privilegeEscalation.length > 0) {
-        output += '⬆️  PRIVILEGE ESCALATION RISKS\n\n';
-        for (const issue of privilegeEscalation) {
-          output += formatIssue(issue) + '\n\n';
+      for (const [type, typeFindings] of groupedFindings) {
+        output += `${formatFindingType(type)}\n\n`;
+        for (const finding of typeFindings) {
+          output += formatFinding(finding) + '\n\n';
         }
       }
+    }
 
-      if (dataLeakage.length > 0) {
-        output += '💧 DATA LEAKAGE RISKS\n\n';
-        for (const issue of dataLeakage) {
-          output += formatIssue(issue) + '\n\n';
+    // Trust boundaries
+    if (response.trust_analysis?.trust_boundaries && response.trust_analysis.trust_boundaries.length > 0) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '🛡️  TRUST BOUNDARIES\n\n';
+      for (const boundary of response.trust_analysis.trust_boundaries) {
+        output += `📦 ${boundary.name} [${boundary.trust_level}]\n`;
+        if (boundary.description) {
+          output += `   ${boundary.description}\n`;
         }
-      }
-
-      if (unauthorizedHandoff.length > 0) {
-        output += '🚫 UNAUTHORIZED HANDOFF RISKS\n\n';
-        for (const issue of unauthorizedHandoff) {
-          output += formatIssue(issue) + '\n\n';
-        }
-      }
-
-      if (missingGuards.length > 0) {
-        output += '🛡️  MISSING GUARDS\n\n';
-        for (const issue of missingGuards) {
-          output += formatIssue(issue) + '\n\n';
-        }
+        output += `   Agents: ${boundary.agent_ids.join(', ')}\n\n`;
       }
     }
 
     // Recommendations
-    if (response.recommendations.length > 0) {
+    const recommendations = response.risk_assessment?.recommendations ?? [];
+    if (recommendations.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '💡 RECOMMENDATIONS\n\n';
-      for (let i = 0; i < response.recommendations.length; i++) {
-        output += `${i + 1}. ${response.recommendations[i]}\n`;
+      for (let i = 0; i < recommendations.length; i++) {
+        output += `${i + 1}. ${recommendations[i]}\n`;
       }
+    }
+
+    // Risk summary
+    if (response.risk_assessment?.summary) {
+      output += '\n📊 SUMMARY\n';
+      output += `   ${response.risk_assessment.summary}\n`;
     }
 
     // Footer
@@ -472,7 +525,7 @@ export const auditA2aTool: ToolDefinition = {
   tool: {
     name: 'inkog_audit_a2a',
     description:
-      'Audit Agent-to-Agent (A2A) communications in multi-agent systems. Detects infinite delegation loops, privilege escalation, data leakage between agents, and unauthorized handoffs. Supports Google A2A protocol, CrewAI, and LangGraph.',
+      'Audit Agent-to-Agent (A2A) communications in multi-agent systems. Detects infinite delegation loops, privilege escalation, data leakage between agents, and unauthorized handoffs. Supports Google A2A protocol, CrewAI, LangGraph, and AutoGen.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -482,9 +535,8 @@ export const auditA2aTool: ToolDefinition = {
         },
         protocol: {
           type: 'string',
-          enum: ['a2a', 'crewai', 'langgraph', 'auto-detect'],
-          default: 'auto-detect',
-          description: 'Multi-agent protocol: a2a (Google), crewai, langgraph, or auto-detect',
+          enum: ['a2a', 'crewai', 'langgraph', 'autogen', 'custom'],
+          description: 'Multi-agent protocol hint (optional, will auto-detect if not specified)',
         },
         check_delegation_chains: {
           type: 'boolean',
