@@ -265,9 +265,10 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     output += '╚══════════════════════════════════════════════════════╝\n\n';
 
     output += `🏛️  Framework: ${frameworkName}\n`;
-    output += `📊 Compliance Score: ${formatScore(response.overall_score)}\n`;
-    output += `${getRiskLevelIcon(response.risk_level)} Risk Level: ${response.risk_level.toUpperCase()}\n`;
-    output += `📅 Generated: ${response.generated_at}\n`;
+    output += `📊 Compliance Score: ${formatScore(response.overall_score ?? 0)}\n`;
+    const riskLevel = response.risk_level ?? 'unknown';
+    output += `${getRiskLevelIcon(riskLevel)} Risk Level: ${riskLevel.toUpperCase()}\n`;
+    output += `📅 Generated: ${response.generated_at ?? new Date().toISOString()}\n`;
     if (response.report_id) {
       output += `🔗 Report ID: ${response.report_id}\n`;
     }
@@ -276,9 +277,9 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     // Findings summary
     output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
     output += '📊 FINDINGS SUMMARY\n\n';
-    const fs = response.findings_summary;
-    output += `   Total: ${fs.total}\n`;
-    output += `   🔴 Critical: ${fs.critical} | 🟠 High: ${fs.high} | 🟡 Medium: ${fs.medium} | 🟢 Low: ${fs.low}\n\n`;
+    const fs = response.findings_summary ?? { total: 0, critical: 0, high: 0, medium: 0, low: 0 };
+    output += `   Total: ${fs.total ?? 0}\n`;
+    output += `   🔴 Critical: ${fs.critical ?? 0} | 🟠 High: ${fs.high ?? 0} | 🟡 Medium: ${fs.medium ?? 0} | 🟢 Low: ${fs.low ?? 0}\n\n`;
 
     // Article breakdown (for EU AI Act, NIST, ISO)
     const articles = response.articles ?? [];
