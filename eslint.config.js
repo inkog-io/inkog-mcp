@@ -28,6 +28,10 @@ export default tseslint.config(
       ],
       // Allow non-null assertions in specific cases
       '@typescript-eslint/no-non-null-assertion': 'warn',
+      // Disable overly strict checks for runtime safety patterns
+      // These rules conflict with defensive coding for API responses
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
       // Require explicit return types on exported functions
       '@typescript-eslint/explicit-function-return-type': [
         'error',
