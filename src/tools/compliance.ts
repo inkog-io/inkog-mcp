@@ -239,11 +239,28 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     }
 
     // Step 2: Use scan_id to generate compliance report
-    const response = await client.generateComplianceReport({
+    const rawResponse = await client.generateComplianceReport({
       scanId: scanResponse.scan_id,
       framework: args.framework,
       format: args.format,
     });
+
+    // The API may return a reports array or a single report
+    // Handle both cases for backward compatibility
+    type RawResponse = typeof rawResponse & { reports?: typeof rawResponse[] };
+    const responseWithReports = rawResponse as RawResponse;
+
+    // Extract the report for the requested framework
+    let response: typeof rawResponse;
+    if (responseWithReports.reports && Array.isArray(responseWithReports.reports)) {
+      // Find the report matching the requested framework, or use the first one
+      const matchingReport = responseWithReports.reports.find(
+        (r) => r.framework === args.framework
+      );
+      response = matchingReport ?? responseWithReports.reports[0] ?? rawResponse;
+    } else {
+      response = rawResponse;
+    }
 
     // If format is markdown or pdf and there's a pre-formatted report, return it
     if (args.format !== 'json' && response.markdown_report) {
@@ -258,7 +275,7 @@ async function complianceHandler(rawArgs: Record<string, unknown>): Promise<Tool
     }
 
     // Build formatted output
-    const frameworkName = getFrameworkDisplayName(response.framework);
+    const frameworkName = getFrameworkDisplayName(response.framework ?? args.framework);
 
     let output = '╔══════════════════════════════════════════════════════╗\n';
     output += '║           📋 Compliance Report                        ║\n';
