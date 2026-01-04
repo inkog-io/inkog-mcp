@@ -380,7 +380,7 @@ export class InkogClient {
     }
   ): Promise<A2AAuditResponse> {
     const body: Record<string, unknown> = {
-      protocol: options?.protocol ?? 'auto-detect',
+      protocol: options?.protocol,  // Let backend auto-detect when undefined
       check_delegation_chains: options?.checkDelegationChains ?? true,
     };
 
