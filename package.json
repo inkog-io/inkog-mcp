@@ -1,6 +1,6 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Inkog AI Security Platform - MCP Server for AI agent vulnerability scanning, AGENTS.md governance verification, and compliance reporting",
   "author": "Inkog <hello@inkog.io>",
   "license": "Apache-2.0",
