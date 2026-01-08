@@ -1,12 +1,13 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.4",
-  "description": "Inkog AI Security Platform - MCP Server for AI agent vulnerability scanning, AGENTS.md governance verification, and compliance reporting",
+  "version": "1.0.5",
+  "mcpName": "io.github.inkog-io/inkog",
+  "description": "Scan AI agents for security vulnerabilities. Audit MCP servers before installation.",
   "author": "Inkog <hello@inkog.io>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/inkog-io/inkog-mcp"
+    "url": "git+https://github.com/inkog-io/inkog-mcp.git"
   },
   "homepage": "https://inkog.io",
   "keywords": [
