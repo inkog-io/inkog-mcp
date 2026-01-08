@@ -426,8 +426,10 @@ export interface A2AAgent {
   name: string;
   role?: string;
   description?: string;
-  tools: string[];
-  delegation_targets: string[];
+  /** Tools available to this agent. May be null from API - use safeArray() */
+  tools: string[] | null;
+  /** Agents this agent can delegate to. May be null from API - use safeArray() */
+  delegation_targets: string[] | null;
   file?: string;
   line?: number;
   can_delegate: boolean;
@@ -455,7 +457,8 @@ export interface A2AFinding {
   type: string; // "infinite-delegation", "missing-auth", "privilege-escalation"
   severity: string;
   description: string;
-  agents_involved: string[];
+  /** Agents involved in this finding. May be null from API - use safeArray() */
+  agents_involved: string[] | null;
   file?: string;
   line?: number;
   remediation: string;
@@ -465,12 +468,14 @@ export interface A2ATrustBoundary {
   id: string;
   name: string;
   trust_level: string;
-  agent_ids: string[];
+  /** Agents within this trust boundary. May be null from API - use safeArray() */
+  agent_ids: string[] | null;
   description?: string;
 }
 
 export interface A2ATrustAnalysis {
-  trust_boundaries: A2ATrustBoundary[];
+  /** Trust boundaries in the system. May be null from API - use safeArray() */
+  trust_boundaries: A2ATrustBoundary[] | null;
   cross_boundary_flows: number;
   unguarded_delegations: number;
   privilege_escalations: number;
@@ -484,17 +489,21 @@ export interface A2ARiskAssessment {
   critical_findings: number;
   high_findings: number;
   summary: string;
-  recommendations: string[];
+  /** Recommendations for improving security. May be null from API - use safeArray() */
+  recommendations: string[] | null;
 }
 
 export interface A2AAuditResponse {
   success: boolean;
   protocol: A2AProtocol;
-  agents: A2AAgent[];
-  communications: A2ACommunication[];
-  findings: A2AFinding[];
-  trust_analysis: A2ATrustAnalysis;
-  risk_assessment: A2ARiskAssessment;
+  /** Detected agents. May be null from API - use safeArray() */
+  agents: A2AAgent[] | null;
+  /** Communication channels between agents. May be null from API - use safeArray() */
+  communications: A2ACommunication[] | null;
+  /** Security findings. May be null from API - use safeArray() */
+  findings: A2AFinding[] | null;
+  trust_analysis: A2ATrustAnalysis | null;
+  risk_assessment: A2ARiskAssessment | null;
   report_id?: string;
   generated_at: string;
 

@@ -32,6 +32,7 @@ import type {
   A2AProtocol,
 } from '../api/types.js';
 import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
+import { hasElements, safeArray, safeJoin, safeLength } from '../utils/array-utils.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
 // =============================================================================
@@ -120,12 +121,12 @@ function formatAgent(agent: A2AAgent): string {
     output += `   📍 ${agent.file}${agent.line ? `:${agent.line}` : ''}\n`;
   }
 
-  if (agent.tools.length > 0) {
-    output += `   🔧 Tools: ${agent.tools.join(', ')}\n`;
+  if (hasElements(agent.tools)) {
+    output += `   🔧 Tools: ${safeJoin(agent.tools)}\n`;
   }
 
-  if (agent.delegation_targets.length > 0) {
-    output += `   🔗 Can delegate to: ${agent.delegation_targets.join(', ')}\n`;
+  if (hasElements(agent.delegation_targets)) {
+    output += `   🔗 Can delegate to: ${safeJoin(agent.delegation_targets)}\n`;
   }
 
   // Security properties
@@ -156,8 +157,8 @@ function formatFinding(finding: A2AFinding): string {
   let output = `${icon} [${finding.severity.toUpperCase()}] ${finding.type}\n`;
   output += `   ${finding.description}\n`;
 
-  if (finding.agents_involved.length > 0) {
-    output += `   Agents: ${finding.agents_involved.join(', ')}\n`;
+  if (hasElements(finding.agents_involved)) {
+    output += `   Agents: ${safeJoin(finding.agents_involved)}\n`;
   }
 
   if (finding.file) {
@@ -190,19 +191,22 @@ function formatFindingType(type: string): string {
   }
 }
 
-function renderDelegationGraph(agents: A2AAgent[], communications: A2ACommunication[]): string {
-  if (agents.length === 0 || communications.length === 0) {
+function renderDelegationGraph(agents: A2AAgent[] | null, communications: A2ACommunication[] | null): string {
+  const safeAgents = safeArray(agents);
+  const safeComms = safeArray(communications);
+
+  if (safeAgents.length === 0 || safeComms.length === 0) {
     return 'No delegation relationships detected.\n';
   }
 
   let output = '\n';
 
   // Simple ASCII graph representation
-  const agentMap = new Map(agents.map((a) => [a.id, a.name]));
+  const agentMap = new Map(safeAgents.map((a) => [a.id, a.name]));
 
   // Group communications by source agent
   const commsBySource = new Map<string, A2ACommunication[]>();
-  for (const comm of communications) {
+  for (const comm of safeComms) {
     if (!commsBySource.has(comm.from)) {
       commsBySource.set(comm.from, []);
     }
@@ -210,7 +214,7 @@ function renderDelegationGraph(agents: A2AAgent[], communications: A2ACommunicat
   }
 
   // Render each agent and its outgoing communications
-  for (const agent of agents) {
+  for (const agent of safeAgents) {
     const agentComms = commsBySource.get(agent.id) ?? [];
     const name = agentMap.get(agent.id) ?? agent.id;
     const displayName = name.length > 12 ? name.substring(0, 10) + '..' : name;
@@ -320,8 +324,8 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
 
     // Overview
     output += `📡 Protocol: ${formatProtocol(response.protocol)}\n`;
-    output += `🤖 Agents Detected: ${response.agents.length}\n`;
-    output += `🔗 Communication Channels: ${response.communications?.length ?? 0}\n`;
+    output += `🤖 Agents Detected: ${safeLength(response.agents)}\n`;
+    output += `🔗 Communication Channels: ${safeLength(response.communications)}\n`;
 
     // Risk assessment
     if (response.risk_assessment) {
@@ -352,7 +356,7 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     }
 
     // Findings summary
-    const findings = response.findings ?? [];
+    const findings = safeArray(response.findings);
     if (findings.length === 0) {
       output += '✅ No multi-agent security issues detected!\n\n';
     } else {
@@ -366,20 +370,21 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     }
 
     // Agent inventory
-    if (response.agents.length > 0) {
+    const agents = safeArray(response.agents);
+    if (agents.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🤖 AGENT INVENTORY\n\n';
-      for (const agent of response.agents) {
+      for (const agent of agents) {
         output += formatAgent(agent) + '\n';
       }
     }
 
     // Delegation graph visualization
-    const communications = response.communications ?? [];
+    const communications = safeArray(response.communications);
     if (communications.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🔗 DELEGATION GRAPH\n';
-      output += renderDelegationGraph(response.agents, communications);
+      output += renderDelegationGraph(agents, communications);
       output += '\n';
 
       output += 'Communication Channels:\n';
@@ -414,20 +419,21 @@ async function auditA2AHandler(rawArgs: Record<string, unknown>): Promise<ToolRe
     }
 
     // Trust boundaries
-    if (response.trust_analysis?.trust_boundaries && response.trust_analysis.trust_boundaries.length > 0) {
+    const trustBoundaries = safeArray(response.trust_analysis?.trust_boundaries);
+    if (trustBoundaries.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '🛡️  TRUST BOUNDARIES\n\n';
-      for (const boundary of response.trust_analysis.trust_boundaries) {
+      for (const boundary of trustBoundaries) {
         output += `📦 ${boundary.name} [${boundary.trust_level}]\n`;
         if (boundary.description) {
           output += `   ${boundary.description}\n`;
         }
-        output += `   Agents: ${boundary.agent_ids.join(', ')}\n\n`;
+        output += `   Agents: ${safeJoin(boundary.agent_ids)}\n\n`;
       }
     }
 
     // Recommendations
-    const recommendations = response.risk_assessment?.recommendations ?? [];
+    const recommendations = safeArray(response.risk_assessment?.recommendations);
     if (recommendations.length > 0) {
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
       output += '💡 RECOMMENDATIONS\n\n';
