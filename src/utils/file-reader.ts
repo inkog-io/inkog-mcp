@@ -98,8 +98,8 @@ const DEFAULT_IGNORE_PATTERNS = [
 ];
 
 const DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
-const DEFAULT_MAX_TOTAL_SIZE = 10 * 1024 * 1024; // 10MB
-const DEFAULT_MAX_FILES = 100;
+const DEFAULT_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB (increased for larger repos)
+const DEFAULT_MAX_FILES = 1000; // Increased from 100 to support larger codebases
 
 // =============================================================================
 // File Reader
