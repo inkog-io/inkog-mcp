@@ -293,10 +293,18 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
  */
 export function getRelativePaths(files: FileInput[], basePath: string): FileInput[] {
   const resolvedBase = path.resolve(basePath);
-  return files.map((file) => ({
-    path: path.relative(resolvedBase, file.path),
-    content: file.content,
-  }));
+  return files.map((file) => {
+    let relativePath = path.relative(resolvedBase, file.path);
+    // Handle case where basePath is the same as the file path (single file scan)
+    // path.relative returns "" which would cause the API to try writing to a directory
+    if (relativePath === '' || relativePath === '.') {
+      relativePath = path.basename(file.path);
+    }
+    return {
+      path: relativePath,
+      content: file.content,
+    };
+  });
 }
 
 /**
