@@ -2,8 +2,9 @@
 # Pre-commit hook for Inkog MCP
 # Prevents secrets and runs quality checks
 
-# Check for API keys in staged files (exclude this hook file)
-if git diff --cached --name-only | grep -v '.husky/pre-commit' | xargs grep -l 'sk_live_\|sk_test_' 2>/dev/null; then
+# Check for API keys in staged files (exclude this hook file and example patterns like sk_live_...)
+# Matches actual keys (sk_live_xxx or sk_test_xxx) but not examples (sk_live_... or sk_live_YOUR_KEY)
+if git diff --cached --name-only | grep -v '.husky/pre-commit' | xargs grep -E 'sk_(live|test)_[a-zA-Z0-9]{10,}' 2>/dev/null; then
   echo "ERROR: Possible API key detected in staged files"
   echo "Please remove secrets before committing"
   exit 1

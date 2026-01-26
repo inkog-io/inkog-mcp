@@ -4,14 +4,24 @@
  * Safe file system operations for reading agent codebases.
  * Features:
  * - Directory traversal with configurable patterns
- * - Binary file detection
+ * - Binary file detection (by extension and content)
  * - Size limits
  * - Ignore patterns (node_modules, .git, etc.)
+ * - Agent-aware intelligent filtering
+ * - Framework detection for optimized scanning
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { minimatch } from 'minimatch';
+import {
+  type AgentRepoSignature,
+  ALWAYS_SKIP_PATTERNS,
+  LOW_PRIORITY_PATTERNS,
+  detectAgentRepo,
+  getFilteringRecommendation,
+  isBinaryExtension,
+} from './agent-detector.js';
 
 // =============================================================================
 // Types
@@ -21,6 +31,14 @@ export interface FileInput {
   path: string;
   content: string;
 }
+
+/**
+ * Filter mode for file reading.
+ * - 'auto': Automatically detect agent repos and adapt filtering (default)
+ * - 'agent-only': Aggressive filtering for known agent repos
+ * - 'all': No filtering, scan all files
+ */
+export type FilterMode = 'auto' | 'agent-only' | 'all';
 
 export interface ReadOptions {
   /** Maximum file size in bytes (default: 1MB) */
@@ -33,6 +51,8 @@ export interface ReadOptions {
   extensions?: string[];
   /** Patterns to ignore (default: node_modules, .git, etc.) */
   ignorePatterns?: string[];
+  /** Filter mode for intelligent file selection (default: 'auto') */
+  filterMode?: FilterMode;
 }
 
 export interface ReadResult {
@@ -55,6 +75,12 @@ export interface ReadResult {
       normal: number;
       low: number;
     };
+    /** Agent detection result (if filterMode is 'auto') */
+    agentDetection?: AgentRepoSignature;
+    /** Files skipped by early binary extension filter */
+    binaryFilesSkipped?: number;
+    /** Files skipped by pattern filter */
+    patternFilesSkipped?: number;
   };
 }
 
@@ -347,6 +373,27 @@ function shouldIgnore(filePath: string, ignorePatterns: string[]): boolean {
 }
 
 /**
+ * Check if a path matches any of the given glob patterns.
+ */
+function matchesAnyPattern(filePath: string, patterns: string[]): boolean {
+  const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+  return patterns.some((pattern) =>
+    minimatch(normalizedPath, pattern.toLowerCase(), {
+      dot: true,
+      matchBase: true,
+      nocase: true,
+    })
+  );
+}
+
+/**
+ * Check if file should be skipped early by extension (binary files).
+ */
+function shouldSkipByExtension(filePath: string): boolean {
+  return isBinaryExtension(filePath);
+}
+
+/**
  * Check if a file is likely binary
  */
 function isBinaryFile(buffer: Buffer): boolean {
@@ -397,12 +444,16 @@ export function readFile(filePath: string, options?: ReadOptions): FileInput | n
 /**
  * Read all files from a directory recursively with intelligent prioritization.
  *
- * TWO-PASS ALGORITHM:
- * 1. PASS 1: Collect all file paths and metadata (no content reading)
- * 2. PASS 2: Sort by priority score, read files in priority order
+ * THREE-PASS ALGORITHM:
+ * 1. DETECT: Analyze repo for agent frameworks and determine filtering strategy
+ * 2. PASS 1: Collect all file paths with early binary/pattern filtering
+ * 3. PASS 2: Sort by priority score, read files in priority order
  *
- * This ensures critical agent files (agent.py, main.py, etc.) are ALWAYS
- * scanned first, even on large enterprise codebases with 10,000+ files.
+ * This ensures:
+ * - Critical agent files (agent.py, main.py, AGENTS.md) are ALWAYS scanned first
+ * - Binary files are skipped early (by extension) to save I/O
+ * - Pattern-based filtering reduces noise for agent repos (tests, docs, migrations)
+ * - Large enterprise codebases (10,000+ files) complete within timeout
  */
 export function readDirectory(dirPath: string, options?: ReadOptions): ReadResult {
   const maxFileSize = options?.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
@@ -410,12 +461,17 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
   const maxFiles = options?.maxFiles ?? DEFAULT_MAX_FILES;
   const extensions = options?.extensions ?? DEFAULT_EXTENSIONS;
   const ignorePatterns = options?.ignorePatterns ?? DEFAULT_IGNORE_PATTERNS;
+  const filterMode = options?.filterMode ?? 'auto';
 
   const result: ReadResult = {
     files: [],
     skipped: [],
     totalSize: 0,
   };
+
+  // Track filtering statistics
+  let binaryFilesSkipped = 0;
+  let patternFilesSkipped = 0;
 
   // Normalize and validate path
   const resolvedPath = path.resolve(dirPath);
@@ -427,6 +483,11 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
 
   // Single file case
   if (rootStats.isFile()) {
+    // Early binary extension check
+    if (shouldSkipByExtension(resolvedPath)) {
+      result.skipped.push({ path: resolvedPath, reason: 'binary_extension' });
+      return result;
+    }
     const file = readFile(resolvedPath, options);
     if (file !== null) {
       result.files.push(file);
@@ -436,12 +497,31 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
   }
 
   // ==========================================================================
+  // DETECT: Analyze repository for agent frameworks
+  // ==========================================================================
+  let agentSignature: AgentRepoSignature | undefined;
+  let additionalSkipPatterns: string[] = [];
+  let aggressiveFilter = false;
+
+  if (filterMode === 'auto') {
+    agentSignature = detectAgentRepo(resolvedPath);
+    const recommendation = getFilteringRecommendation(agentSignature);
+    additionalSkipPatterns = recommendation.skipPatterns;
+    aggressiveFilter = recommendation.aggressiveFilter;
+  } else if (filterMode === 'agent-only') {
+    // Force aggressive filtering
+    additionalSkipPatterns = [...ALWAYS_SKIP_PATTERNS, ...LOW_PRIORITY_PATTERNS];
+    aggressiveFilter = true;
+  }
+  // filterMode === 'all' means no additional filtering
+
+  // ==========================================================================
   // PASS 1: Collect all file paths (no content reading)
   // ==========================================================================
   const allFiles: PrioritizedFile[] = [];
 
   function collectFiles(currentPath: string): void {
-    // Check if path should be ignored
+    // Check if path should be ignored by default patterns
     if (shouldIgnore(currentPath, ignorePatterns)) {
       return;
     }
@@ -465,9 +545,24 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
         collectFiles(path.join(currentPath, entry));
       }
     } else if (stats.isFile()) {
-      // Check extension
+      // EARLY FILTER 1: Skip binary files by extension
+      if (shouldSkipByExtension(currentPath)) {
+        binaryFilesSkipped++;
+        result.skipped.push({ path: currentPath, reason: 'binary_extension' });
+        return;
+      }
+
+      // Check extension against allowed list
       const ext = path.extname(currentPath).toLowerCase();
       if (extensions.length > 0 && !extensions.includes(ext)) {
+        return;
+      }
+
+      // EARLY FILTER 2: Skip by pattern (when filtering enabled)
+      const relativePath = path.relative(resolvedPath, currentPath);
+      if (additionalSkipPatterns.length > 0 && matchesAnyPattern(relativePath, additionalSkipPatterns)) {
+        patternFilesSkipped++;
+        result.skipped.push({ path: currentPath, reason: 'pattern_filtered' });
         return;
       }
 
@@ -478,10 +573,21 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
       }
 
       // Add to collection with priority score
+      // Boost priority if in hot directories (when agent repo detected)
+      let score = calculateFilePriority(currentPath);
+      if (agentSignature?.hotDirectories) {
+        for (const hotDir of agentSignature.hotDirectories) {
+          if (relativePath.startsWith(hotDir + '/') || relativePath.startsWith(hotDir + path.sep)) {
+            score += 50; // Boost files in hot directories
+            break;
+          }
+        }
+      }
+
       allFiles.push({
         path: currentPath,
         size: stats.size,
-        score: calculateFilePriority(currentPath),
+        score,
       });
     }
   }
@@ -552,19 +658,34 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
     low: allFiles.filter(f => f.score < 10).length,
   };
 
-  // Add metadata
-  result.metadata = {
-    totalFilesFound: allFiles.length,
+  // Add metadata with filtering statistics
+  const metadata: NonNullable<ReadResult['metadata']> = {
+    totalFilesFound: allFiles.length + binaryFilesSkipped + patternFilesSkipped,
     filesScanned: result.files.length,
     filesSkipped: result.skipped.length,
     criticalFilesSkipped,
     priorityBreakdown,
+    binaryFilesSkipped,
+    patternFilesSkipped,
   };
+  if (agentSignature) {
+    metadata.agentDetection = agentSignature;
+  }
+  result.metadata = metadata;
+
+  // Log filtering summary (helpful for debugging)
+  if (agentSignature) {
+    const filterInfo = aggressiveFilter ? 'aggressive' : 'moderate';
+    console.log(
+      `Agent repo detected (confidence: ${agentSignature.confidence}, frameworks: [${agentSignature.frameworks.join(', ')}]). ` +
+      `Filtering: ${filterInfo}. Skipped: ${binaryFilesSkipped} binary, ${patternFilesSkipped} by pattern.`
+    );
+  }
 
   // Log warning if critical files were skipped
   if (criticalFilesSkipped > 0) {
     console.warn(
-      `⚠️ WARNING: ${criticalFilesSkipped} critical agent files were skipped due to limits. ` +
+      `WARNING: ${criticalFilesSkipped} critical agent files were skipped due to limits. ` +
       `Consider increasing maxFiles (current: ${maxFiles}) or maxTotalSize.`
     );
   }

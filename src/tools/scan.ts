@@ -21,7 +21,7 @@ import {
   InkogRateLimitError,
 } from '../api/client.js';
 import type { Finding, SecurityPolicy } from '../api/types.js';
-import { getRelativePaths, readDirectory } from '../utils/file-reader.js';
+import { type FilterMode, getRelativePaths, readDirectory } from '../utils/file-reader.js';
 import type { ToolDefinition, ToolResult } from './index.js';
 
 // =============================================================================
@@ -42,6 +42,13 @@ const ScanArgsSchema = z.object({
     .optional()
     .default('summary')
     .describe('Output format: summary (default), detailed (full findings), sarif (for CI/CD)'),
+  filter: z
+    .enum(['auto', 'agent-only', 'all'])
+    .optional()
+    .default('auto')
+    .describe(
+      'File filtering mode: auto (detect agent repos and adapt filtering), agent-only (aggressive filtering for known agent repos), all (no filtering, scan all files)'
+    ),
 });
 
 type ScanArgs = z.infer<typeof ScanArgsSchema>;
@@ -191,15 +198,24 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
   const args: ScanArgs = parseResult.data;
 
   try {
-    // Read files from path
-    const readResult = readDirectory(args.path);
+    // Read files from path with intelligent filtering
+    const readResult = readDirectory(args.path, {
+      filterMode: args.filter as FilterMode,
+    });
 
     if (readResult.files.length === 0) {
+      // Provide helpful message based on filtering
+      const filteringNote =
+        args.filter === 'auto' && readResult.metadata?.agentDetection?.isAgentRepo
+          ? `\n\nNote: Agent repo detected (${readResult.metadata.agentDetection.confidence} confidence). ` +
+            `Try --filter=all to scan all files including tests/docs.`
+          : '';
+
       return {
         content: [
           {
             type: 'text',
-            text: `No scannable files found in: ${args.path}\n\nSupported file types: .py, .js, .ts, .go, .java, .rb, .yaml, .json, .md`,
+            text: `No scannable files found in: ${args.path}\n\nSupported file types: .py, .js, .ts, .go, .java, .rb, .yaml, .json, .md${filteringNote}`,
           },
         ],
       };
@@ -236,6 +252,22 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
       response.files_scanned,
       args.policy
     );
+
+    // Add filtering info if agent repo detected (SARIF already returned above)
+    const agentInfo = readResult.metadata?.agentDetection;
+    if (agentInfo?.isAgentRepo) {
+      const frameworks = agentInfo.frameworks.length > 0 ? agentInfo.frameworks.join(', ') : 'unknown';
+      output += `Agent repo detected (${agentInfo.confidence} confidence)\n`;
+      output += `   Frameworks: ${frameworks}\n`;
+      if (agentInfo.hasGovernance) {
+        output += `   AGENTS.md: present\n`;
+      }
+      if (readResult.metadata?.binaryFilesSkipped || readResult.metadata?.patternFilesSkipped) {
+        const totalSkipped = (readResult.metadata.binaryFilesSkipped ?? 0) + (readResult.metadata.patternFilesSkipped ?? 0);
+        output += `   Optimized: ${totalSkipped} files skipped (${readResult.metadata.binaryFilesSkipped ?? 0} binary, ${readResult.metadata.patternFilesSkipped ?? 0} filtered)\n`;
+      }
+      output += '\n';
+    }
 
     // Add findings
     if (findings.length > 0) {
@@ -386,6 +418,13 @@ export const scanTool: ToolDefinition = {
           default: 'summary',
           description:
             'Output format: summary (default), detailed (full findings), sarif (for CI/CD)',
+        },
+        filter: {
+          type: 'string',
+          enum: ['auto', 'agent-only', 'all'],
+          default: 'auto',
+          description:
+            'File filtering: auto (detect agent repos, adapt filtering), agent-only (aggressive filtering), all (no filtering)',
         },
       },
       required: ['path'],
