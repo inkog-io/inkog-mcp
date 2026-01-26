@@ -26,7 +26,7 @@ describe('config', () => {
       expect(config.serverVersion).toBe('1.0.0');
       expect(config.logLevel).toBe('info');
       expect(config.logFormat).toBe('json');
-      expect(config.apiTimeout).toBe(30000);
+      expect(config.apiTimeout).toBe(180000); // 3 minutes to match backend
       expect(config.apiRetryAttempts).toBe(3);
     });
 
