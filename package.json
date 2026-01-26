@@ -1,6 +1,6 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "mcpName": "io.github.inkog-io/inkog",
   "description": "Scan AI agents for security vulnerabilities. Audit MCP servers before installation.",
   "author": "Inkog <hello@inkog.io>",
