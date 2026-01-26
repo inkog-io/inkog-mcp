@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { minimatch } from 'minimatch';
 
 // =============================================================================
 // Types
@@ -133,12 +134,14 @@ interface PriorityConfig {
 
 const FILE_PRIORITIES: Record<string, PriorityConfig> = {
   // CRITICAL (Score: 1000) - ALWAYS scan first
-  // These are the most likely to contain agent logic
+  // These are the most likely to contain agent logic and entry points
   critical: {
     score: 1000,
     patterns: [
+      // Governance files
       '**/AGENTS.md',
       '**/agents.md',
+      // Agent definition files
       '**/agent.py',
       '**/agent.ts',
       '**/agent.js',
@@ -148,18 +151,41 @@ const FILE_PRIORITIES: Record<string, PriorityConfig> = {
       '**/graph.py',
       '**/workflow.py',
       '**/pipeline.py',
+      // Entry points (nested)
       '**/main.py',
       '**/app.py',
       '**/index.ts',
       '**/index.js',
       '**/server.ts',
       '**/server.js',
+      // ROOT-LEVEL entry points (bare filenames for matchBase)
+      'main.py',
+      'app.py',
+      'agent.py',
+      'server.py',
+      'run.py',
+      'cli.py',
+      'index.ts',
+      'index.js',
+      'main.ts',
+      'main.js',
+      'server.ts',
+      'server.js',
+      // Configuration files that often contain secrets
+      'config.py',
+      'settings.py',
+      'config.ts',
+      'config.js',
+      '.env',
+      '.env.local',
+      '.env.production',
     ],
   },
-  // HIGH (Score: 500) - Agent-related files
+  // HIGH (Score: 500) - Agent-related and security-sensitive files
   high: {
     score: 500,
     patterns: [
+      // Agent-related patterns
       '**/*agent*.py',
       '**/*agent*.ts',
       '**/*agent*.js',
@@ -171,12 +197,35 @@ const FILE_PRIORITIES: Record<string, PriorityConfig> = {
       '**/*prompt*.ts',
       '**/*chain*.py',
       '**/*chain*.ts',
+      // Source directories
       '**/src/**/*.py',
       '**/src/**/*.ts',
       '**/core/**/*.py',
       '**/core/**/*.ts',
       '**/lib/**/*.py',
       '**/lib/**/*.ts',
+      // SECURITY-SENSITIVE patterns (files likely to contain vulnerabilities)
+      '**/*exec*.py',
+      '**/*eval*.py',
+      '**/*shell*.py',
+      '**/*subprocess*.py',
+      '**/*command*.py',
+      '**/*sql*.py',
+      '**/*query*.py',
+      '**/*db*.py',
+      '**/*database*.py',
+      '**/*auth*.py',
+      '**/*credential*.py',
+      '**/*secret*.py',
+      '**/*token*.py',
+      '**/*password*.py',
+      '**/*api_key*.py',
+      // Node and code generation patterns
+      '**/*node*.py',
+      '**/*generate*.py',
+      '**/*scrape*.py',
+      '**/*fetch*.py',
+      '**/*request*.py',
     ],
   },
   // MEDIUM (Score: 100) - Configuration files
@@ -225,54 +274,54 @@ const FILE_PRIORITIES: Record<string, PriorityConfig> = {
 /**
  * Calculate priority score for a file path.
  * Higher score = higher priority = scanned first.
+ *
+ * IMPORTANT: Returns the MAXIMUM score across all matching tiers,
+ * not the first match. This ensures a file like "tests/agent_helper.py"
+ * gets its HIGH score from "*agent*" rather than LOW from "tests/**".
  */
-function calculateFilePriority(filePath: string): number {
+export function calculateFilePriority(filePath: string): number {
   const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
+  let maxScore = 5; // Default score for unmatched files
 
-  // Check each priority tier from highest to lowest
+  // Check ALL priority tiers and find the maximum score
   for (const config of Object.values(FILE_PRIORITIES)) {
     for (const pattern of config.patterns) {
       if (matchesGlobPattern(normalizedPath, pattern)) {
-        // Boost score for files in root or src directories
-        let score = config.score;
-        if (normalizedPath.split('/').length <= 3) {
-          score += 50; // Shallow files get bonus
+        if (config.score > maxScore) {
+          maxScore = config.score;
         }
-        return score;
+        // Found a match in this tier, no need to check other patterns in same tier
+        break;
       }
     }
   }
 
-  // Default score for unmatched files
-  return 5;
+  // Depth bonus: shallow files are more likely to be entry points
+  const depth = normalizedPath.split('/').filter(Boolean).length;
+  if (depth <= 2) {
+    maxScore += 25; // Root or one level deep
+  }
+
+  return maxScore;
 }
 
 /**
- * Simple glob pattern matching.
- * Supports: ** (any path), * (any segment), exact match
+ * Glob pattern matching using minimatch library.
+ * Properly handles:
+ * - Root-level files (main.py matches glob patterns)
+ * - Nested paths (src/agents/main.py matches recursive patterns)
+ * - Wildcards in filenames (files with agent in name)
  */
-function matchesGlobPattern(filePath: string, pattern: string): boolean {
+export function matchesGlobPattern(filePath: string, pattern: string): boolean {
+  const normalizedPath = filePath.replace(/\\/g, '/').toLowerCase();
   const normalizedPattern = pattern.replace(/\\/g, '/').toLowerCase();
 
-  // Convert glob to regex
-  let regexPattern = normalizedPattern
-    .replace(/\*\*/g, '<<<DOUBLESTAR>>>')
-    .replace(/\*/g, '[^/]*')
-    .replace(/<<<DOUBLESTAR>>>/g, '.*')
-    .replace(/\./g, '\\.')
-    .replace(/\//g, '\\/');
-
-  // Match anywhere in path or from start
-  if (!regexPattern.startsWith('.*')) {
-    regexPattern = '(^|.*)' + regexPattern;
-  }
-
-  try {
-    const regex = new RegExp(regexPattern + '$', 'i');
-    return regex.test(filePath);
-  } catch {
-    return false;
-  }
+  // Use minimatch with appropriate options
+  return minimatch(normalizedPath, normalizedPattern, {
+    dot: true, // Match dotfiles (.env, .agents.md)
+    matchBase: true, // Allow pattern without path to match basename
+    nocase: true, // Case insensitive
+  });
 }
 
 interface PrioritizedFile {

@@ -1,6 +1,6 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.9",
+  "version": "1.0.11",
   "mcpName": "io.github.inkog-io/inkog",
   "description": "Scan AI agents for security vulnerabilities. Audit MCP servers before installation.",
   "author": "Inkog <hello@inkog.io>",
@@ -48,10 +48,12 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
+    "minimatch": "^10.1.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@types/minimatch": "^5.1.2",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
