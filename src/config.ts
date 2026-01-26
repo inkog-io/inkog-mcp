@@ -14,7 +14,7 @@ const ConfigSchema = z.object({
   // API Configuration
   apiBaseUrl: z.string().url().default('https://api.inkog.io'),
   apiVersion: z.string().default('v1'),
-  apiTimeout: z.number().positive().default(30000),
+  apiTimeout: z.number().positive().default(180000), // 3 minutes to match backend worker timeout
   apiRetryAttempts: z.number().int().min(0).max(10).default(3),
   apiRetryDelay: z.number().positive().default(1000),
 
