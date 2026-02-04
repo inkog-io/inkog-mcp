@@ -400,8 +400,10 @@ export const LOW_PRIORITY_PATTERNS = [
   '**/spec/**',
   '**/docs/**',
   '**/documentation/**',
-  '**/examples/**',
-  '**/samples/**',
+  // Removed '**/examples/**' and '**/samples/**' — these directories in agent repos
+  // often contain the most security-relevant code (vulnerable demos, sample integrations).
+  // Skipping them caused 0 findings for repos like demo_agent where all vulnerable
+  // code lives in examples/.
   '**/migrations/**',
   '**/static/**',
   '**/assets/**',
