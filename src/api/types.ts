@@ -33,34 +33,34 @@ export type SecurityPolicy =
 // =============================================================================
 
 export interface ComplianceMapping {
-  euAiActArticles: string[];
-  nistCategories: string[];
-  owaspItems: string[];
-  cweIds: string[];
-  iso42001Clauses: string[];
-  gdprArticles: string[];
+  eu_ai_act_articles: string[];
+  nist_categories: string[];
+  owasp_items: string[];
+  cwe_ids: string[];
+  iso_42001_clauses: string[];
+  gdpr_articles: string[];
 }
 
 export interface Finding {
   id: string;
-  patternId: string;
+  pattern_id: string;
   file: string;
   line: number;
   column: number;
-  endLine?: number;
-  endColumn?: number;
+  end_line?: number;
+  end_column?: number;
   severity: Severity;
   confidence: number;
-  calibratedConfidence?: number;
+  calibrated_confidence?: number;
   message: string;
   cwe?: string;
   category: string;
-  riskTier: RiskTier;
-  inputTainted: boolean;
-  taintSource?: string;
+  risk_tier: RiskTier;
+  input_tainted: boolean;
+  taint_source?: string;
   remediation?: string;
-  complianceMapping?: ComplianceMapping;
-  codeSnippet?: string;
+  compliance_mapping?: ComplianceMapping;
+  code_snippet?: string;
 }
 
 // =============================================================================

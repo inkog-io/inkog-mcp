@@ -100,7 +100,7 @@ function formatGovernanceStatus(status: string): string {
 
 function formatFinding(finding: Finding, detailed: boolean): string {
   const icon = formatSeverityIcon(finding.severity);
-  const tierLabel = formatRiskTier(finding.riskTier);
+  const tierLabel = formatRiskTier(finding.risk_tier);
   const location = `${finding.file}:${finding.line}`;
 
   let output = `${icon} [${finding.severity}] ${finding.message}\n`;
@@ -111,16 +111,16 @@ function formatFinding(finding: Finding, detailed: boolean): string {
     output += ` | ${finding.cwe}`;
   }
 
-  if (finding.inputTainted && finding.taintSource !== undefined) {
-    output += `\n   ⚠️  Taint source: ${finding.taintSource}`;
+  if (finding.input_tainted && finding.taint_source !== undefined) {
+    output += `\n   ⚠️  Taint source: ${finding.taint_source}`;
   }
 
   if (detailed && finding.remediation !== undefined) {
     output += `\n   💡 ${finding.remediation}`;
   }
 
-  if (detailed && finding.codeSnippet !== undefined) {
-    output += `\n   \`\`\`\n   ${finding.codeSnippet}\n   \`\`\``;
+  if (detailed && finding.code_snippet !== undefined) {
+    output += `\n   \`\`\`\n   ${finding.code_snippet}\n   \`\`\``;
   }
 
   return output;
@@ -259,9 +259,9 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
       output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
 
       // Group by tier
-      const vulnerabilities = findings.filter((f) => f.riskTier === 'vulnerability');
-      const riskPatterns = findings.filter((f) => f.riskTier === 'risk_pattern');
-      const hardening = findings.filter((f) => f.riskTier === 'hardening');
+      const vulnerabilities = findings.filter((f) => f.risk_tier === 'vulnerability');
+      const riskPatterns = findings.filter((f) => f.risk_tier === 'risk_pattern');
+      const hardening = findings.filter((f) => f.risk_tier === 'hardening');
 
       if (vulnerabilities.length > 0) {
         output += '🔴 EXPLOITABLE VULNERABILITIES:\n\n';
