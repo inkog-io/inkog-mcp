@@ -126,21 +126,16 @@ function formatFinding(finding: Finding, detailed: boolean): string {
   return output;
 }
 
-function formatSummary(
-  findings: Finding[],
+function formatSummaryFromCounts(
+  total: number,
+  critical: number,
+  high: number,
+  medium: number,
+  low: number,
   riskScore: number,
   filesScanned: number,
   policy: SecurityPolicy
 ): string {
-  const critical = findings.filter((f) => f.severity === 'CRITICAL').length;
-  const high = findings.filter((f) => f.severity === 'HIGH').length;
-  const medium = findings.filter((f) => f.severity === 'MEDIUM').length;
-  const low = findings.filter((f) => f.severity === 'LOW').length;
-
-  const vulnerabilities = findings.filter((f) => f.riskTier === 'vulnerability').length;
-  const riskPatterns = findings.filter((f) => f.riskTier === 'risk_pattern').length;
-  const hardening = findings.filter((f) => f.riskTier === 'hardening').length;
-
   let output = '╔══════════════════════════════════════════════════════╗\n';
   output += '║           🔍 AI Agent Risk Assessment                ║\n';
   output += '╚══════════════════════════════════════════════════════╝\n\n';
@@ -149,29 +144,13 @@ function formatSummary(
   output += `📊 Risk score: ${riskScore}/100\n`;
   output += `🔒 Policy: ${policy}\n\n`;
 
-  if (findings.length === 0) {
+  if (total === 0) {
     output += '✅ No security findings detected!\n';
     return output;
   }
 
-  output += `📋 Total findings: ${findings.length}\n`;
+  output += `📋 Total findings: ${total}\n`;
   output += `   🔴 Critical: ${critical} | 🟠 High: ${high} | 🟡 Medium: ${medium} | 🟢 Low: ${low}\n\n`;
-
-  if (vulnerabilities > 0) {
-    output += `🔴 EXPLOITABLE VULNERABILITIES (${vulnerabilities})\n`;
-    output +=
-      '   Require immediate attention - proven attack paths\n\n';
-  }
-
-  if (riskPatterns > 0) {
-    output += `🟠 RISK PATTERNS (${riskPatterns})\n`;
-    output += '   Structural issues that could become vulnerabilities\n\n';
-  }
-
-  if (hardening > 0) {
-    output += `🟡 HARDENING RECOMMENDATIONS (${hardening})\n`;
-    output += '   Best practices for improved security posture\n\n';
-  }
 
   return output;
 }
@@ -246,8 +225,14 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
 
     // Build human-readable output
     const findings = response.findings ?? [];
-    let output = formatSummary(
-      findings,
+    // Use server summary counts when available (summary output mode doesn't include findings array)
+    const summary = response.summary as { total?: number; critical?: number; high?: number; medium?: number; low?: number } | undefined;
+    let output = formatSummaryFromCounts(
+      summary?.total ?? findings.length,
+      summary?.critical ?? findings.filter((f) => f.severity === 'CRITICAL').length,
+      summary?.high ?? findings.filter((f) => f.severity === 'HIGH').length,
+      summary?.medium ?? findings.filter((f) => f.severity === 'MEDIUM').length,
+      summary?.low ?? findings.filter((f) => f.severity === 'LOW').length,
       response.risk_score,
       response.files_scanned,
       args.policy
