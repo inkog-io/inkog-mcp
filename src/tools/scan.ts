@@ -225,14 +225,15 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
 
     // Build human-readable output
     const findings = response.findings ?? [];
-    // Use server summary counts when available (summary output mode doesn't include findings array)
-    const summary = response.summary as { total?: number; critical?: number; high?: number; medium?: number; low?: number } | undefined;
+    // Always count from findings array for consistency with CLI output.
+    // Server summary.total may include governance findings that were filtered
+    // by policy, causing MCP vs CLI count mismatch.
     let output = formatSummaryFromCounts(
-      summary?.total ?? findings.length,
-      summary?.critical ?? findings.filter((f) => f.severity === 'CRITICAL').length,
-      summary?.high ?? findings.filter((f) => f.severity === 'HIGH').length,
-      summary?.medium ?? findings.filter((f) => f.severity === 'MEDIUM').length,
-      summary?.low ?? findings.filter((f) => f.severity === 'LOW').length,
+      findings.length,
+      findings.filter((f) => f.severity === 'CRITICAL').length,
+      findings.filter((f) => f.severity === 'HIGH').length,
+      findings.filter((f) => f.severity === 'MEDIUM').length,
+      findings.filter((f) => f.severity === 'LOW').length,
       response.risk_score,
       response.files_scanned,
       args.policy
