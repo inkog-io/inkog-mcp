@@ -140,7 +140,7 @@ const DEFAULT_IGNORE_PATTERNS = [
 
 const DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const DEFAULT_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB (increased for larger repos)
-const DEFAULT_MAX_FILES = 2000; // Increased to support enterprise codebases
+const DEFAULT_MAX_FILES = 500; // Aligned with CLI default for parity
 
 // =============================================================================
 // File Priority Configuration (Enterprise-Grade)
@@ -514,6 +514,33 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
     aggressiveFilter = true;
   }
   // filterMode === 'all' means no additional filtering
+
+  // ==========================================================================
+  // GITIGNORE: Read .gitignore and add patterns to ignore list
+  // Aligns MCP file filtering with CLI's .gitignore support for parity
+  // ==========================================================================
+  const gitignorePath = path.join(resolvedPath, '.gitignore');
+  if (fs.existsSync(gitignorePath)) {
+    try {
+      const gitignoreContent = fs.readFileSync(gitignorePath, 'utf-8');
+      const gitignoreLines = gitignoreContent.split('\n');
+      for (const line of gitignoreLines) {
+        const trimmed = line.trim();
+        // Skip empty lines and comments
+        if (trimmed === '' || trimmed.startsWith('#')) {
+          continue;
+        }
+        // Skip negation patterns (lines starting with !)
+        if (trimmed.startsWith('!')) {
+          continue;
+        }
+        // Add as glob pattern for additional filtering
+        additionalSkipPatterns.push('**/' + trimmed.replace(/^\//, ''));
+      }
+    } catch {
+      // Ignore .gitignore read errors
+    }
+  }
 
   // ==========================================================================
   // PASS 1: Collect all file paths (no content reading)
