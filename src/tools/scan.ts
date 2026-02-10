@@ -11,6 +11,8 @@
  * - Missing governance controls
  */
 
+import path from 'node:path';
+
 import { z } from 'zod';
 
 import {
@@ -30,6 +32,10 @@ import type { ToolDefinition, ToolResult } from './index.js';
 
 const ScanArgsSchema = z.object({
   path: z.string().describe('File or directory path to scan'),
+  agent_name: z
+    .string()
+    .optional()
+    .describe('Agent name for dashboard identification (auto-detected from path if not provided)'),
   policy: z
     .enum(['low-noise', 'balanced', 'comprehensive', 'governance', 'eu-ai-act'])
     .optional()
@@ -203,12 +209,19 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
     // Get relative paths for cleaner output
     const files = getRelativePaths(readResult.files, args.path);
 
+    // Derive agent name from path if not explicitly provided
+    const agentName = args.agent_name ?? path.basename(args.path).replace(/\.[^.]+$/, '') ?? undefined;
+
     // Call Inkog API
     const client = getClient();
-    const response = await client.scan(files, {
+    const scanOptions: { policy?: SecurityPolicy; output?: 'summary' | 'detailed' | 'sarif'; agentName?: string } = {
       policy: args.policy,
       output: args.output,
-    });
+    };
+    if (agentName) {
+      scanOptions.agentName = agentName;
+    }
+    const response = await client.scan(files, scanOptions);
 
     // Format output based on requested format
     if (args.output === 'sarif') {
@@ -390,6 +403,10 @@ export const scanTool: ToolDefinition = {
         path: {
           type: 'string',
           description: 'File or directory path to scan',
+        },
+        agent_name: {
+          type: 'string',
+          description: 'Agent name for dashboard identification (auto-detected from path if not provided)',
         },
         policy: {
           type: 'string',

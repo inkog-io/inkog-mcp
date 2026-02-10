@@ -232,6 +232,7 @@ export class InkogClient {
     options?: {
       policy?: SecurityPolicy;
       output?: 'summary' | 'detailed' | 'sarif';
+      agentName?: string;
     }
   ): Promise<ScanResponse> {
     return this.request<ScanResponse>({
@@ -241,6 +242,7 @@ export class InkogClient {
         files,
         policy: options?.policy ?? 'balanced',
         output: options?.output ?? 'summary',
+        agent_name: options?.agentName,
       },
     });
   }
