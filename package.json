@@ -2,7 +2,7 @@
   "name": "@inkog-io/mcp",
   "version": "1.0.17",
   "mcpName": "io.github.inkog-io/inkog",
-  "description": "Scan AI agents for security vulnerabilities. Audit MCP servers before installation.",
+  "description": "The pre-flight check for AI agents. Static analysis for logic flaws, security risks, and compliance.",
   "author": "Inkog <hello@inkog.io>",
   "license": "Apache-2.0",
   "repository": {
@@ -12,8 +12,10 @@
   "homepage": "https://inkog.io",
   "keywords": [
     "mcp",
-    "ai-security",
     "ai-agents",
+    "static-analysis",
+    "agent-readiness",
+    "pre-flight-check",
     "agents-md",
     "governance",
     "compliance",
@@ -21,7 +23,7 @@
     "langchain",
     "crewai",
     "langgraph",
-    "vulnerability-scanner"
+    "infinite-loop-detection"
   ],
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,6 @@
 # Inkog MCP Server
 
-AI Security Platform for the Agentic Era - Available in Claude, ChatGPT, Cursor, and any MCP-compatible client.
+The pre-flight check for AI agents - Available in Claude, ChatGPT, Cursor, and any MCP-compatible client.
 
 [![npm version](https://img.shields.io/npm/v/@inkog-io/mcp)](https://www.npmjs.com/package/@inkog-io/mcp)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -8,14 +8,14 @@ AI Security Platform for the Agentic Era - Available in Claude, ChatGPT, Cursor,
 
 ## What is Inkog?
 
-Inkog is the **AI Security Platform (AISP)** for securing AI agents. It provides:
+Inkog is a **static analysis tool for AI agents**. It verifies your agents are ready to ship. It provides:
 
-- **Vulnerability Scanning**: Detect prompt injection, infinite loops, token bombing, SQL injection via LLM
+- **Logic Flaw Detection**: Find infinite loops, recursion risks, and missing exit conditions
+- **Security Analysis**: Detect prompt injection paths, unconstrained tools, and data leakage risks
 - **AGENTS.md Governance**: Validate that code behavior matches governance declarations
-- **Compliance Reporting**: Generate reports for EU AI Act, NIST AI RMF, ISO 42001, OWASP LLM Top 10
-- **MCP Server Auditing**: Security audit any MCP server from the registry
-- **MLBOM Generation**: Create Machine Learning Bill of Materials for supply chain visibility
-- **Multi-Agent Security**: Audit Agent-to-Agent communications for security risks
+- **Compliance Reporting**: Generate reports for EU AI Act, NIST AI RMF, OWASP LLM Top 10
+- **MCP Server Auditing**: Audit any MCP server before installation
+- **Multi-Agent Analysis**: Audit Agent-to-Agent communications for logic and security issues
 
 ## Installation
 
@@ -69,11 +69,11 @@ npm install -g @inkog-io/mcp
 
 ## Available Tools
 
-### P0 - Core Security (Essential)
+### P0 - Core Analysis (Essential)
 
 | Tool | Description |
 |------|-------------|
-| `inkog_scan` | Scan AI agent code for security vulnerabilities |
+| `inkog_scan` | Static analysis for logic flaws and security risks |
 | `inkog_verify_governance` | Validate AGENTS.md declarations match actual code behavior |
 
 ### P1 - Enterprise Features
@@ -82,10 +82,10 @@ npm install -g @inkog-io/mcp
 |------|-------------|
 | `inkog_compliance_report` | Generate EU AI Act, NIST, OWASP compliance reports |
 | `inkog_explain_finding` | Get detailed remediation guidance for findings |
-| `inkog_audit_mcp_server` | Security audit any MCP server |
+| `inkog_audit_mcp_server` | Audit any MCP server before installation |
 | `inkog_generate_mlbom` | Generate ML Bill of Materials (CycloneDX, SPDX) |
 
-### P2 - Multi-Agent Security
+### P2 - Multi-Agent Analysis
 
 | Tool | Description |
 |------|-------------|
@@ -95,16 +95,16 @@ npm install -g @inkog-io/mcp
 
 ### inkog_scan
 
-Scan AI agent code for security vulnerabilities.
+Static analysis for AI agent code - finds logic flaws and security risks.
 
 ```
 Arguments:
   path     (required) File or directory path to scan
-  policy   (optional) Security policy: low-noise, balanced, comprehensive, governance, eu-ai-act
+  policy   (optional) Analysis policy: low-noise, balanced, comprehensive, governance, eu-ai-act
   output   (optional) Output format: summary, detailed, sarif
 ```
 
-**Example**: "Scan my LangChain agent for vulnerabilities"
+**Example**: "Scan my LangChain agent for logic flaws"
 
 ### inkog_verify_governance
 
@@ -227,9 +227,13 @@ npm run lint
 
 ## Why Inkog?
 
+### The Pre-Flight Check for AI Agents
+
+Think of Inkog like the checklist pilots run before takeoff. You don't skip it even when you're confident. It verifies your agent is ready to ship.
+
 ### The Only Tool with AGENTS.md Verification
 
-Inkog is the **only security tool** that can validate your agent's governance declarations against its actual code behavior. This is essential for:
+Inkog is the **only tool** that can validate your agent's governance declarations against its actual code behavior. This is essential for:
 
 - **EU AI Act Article 14** compliance (human oversight)
 - **Enterprise governance** requirements
@@ -237,17 +241,17 @@ Inkog is the **only security tool** that can validate your agent's governance de
 
 ### Purpose-Built for AI Agents
 
-Unlike traditional security scanners (Snyk, Semgrep, SonarQube), Inkog understands AI-specific vulnerabilities:
+Unlike traditional code scanners (Snyk, Semgrep, SonarQube), Inkog understands AI-specific issues:
 
-- Prompt injection attacks
-- Infinite loops and token bombing
-- SQL injection via LLM output
+- Infinite loops and recursion risks
+- Prompt injection paths
+- Unconstrained tool access
+- Missing exit conditions
 - Cross-tenant data leakage
-- Recursive tool calling
 
 ### Multi-Framework Support
 
-Inkog's Universal IR (Intermediate Representation) works with any agent framework. Add one integration, get security for all frameworks.
+Inkog's Universal IR (Intermediate Representation) works with any agent framework. Add one integration, get analysis for all frameworks.
 
 ## License
 
