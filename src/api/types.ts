@@ -61,6 +61,10 @@ export interface Finding {
   remediation?: string;
   compliance_mapping?: ComplianceMapping;
   code_snippet?: string;
+  display_title?: string;
+  explanation_trace?: string;
+  remediation_code?: string;
+  remediation_steps?: string[];
 }
 
 // =============================================================================

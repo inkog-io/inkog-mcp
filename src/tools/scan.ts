@@ -109,7 +109,8 @@ function formatFinding(finding: Finding, detailed: boolean): string {
   const tierLabel = formatRiskTier(finding.risk_tier);
   const location = `${finding.file}:${finding.line}`;
 
-  let output = `${icon} [${finding.severity}] ${finding.message}\n`;
+  const title = finding.display_title ?? finding.message;
+  let output = `${icon} [${finding.severity}] ${title}\n`;
   output += `   📍 ${location}\n`;
   output += `   📊 ${tierLabel}`;
 
@@ -119,6 +120,21 @@ function formatFinding(finding: Finding, detailed: boolean): string {
 
   if (finding.input_tainted && finding.taint_source !== undefined) {
     output += `\n   ⚠️  Taint source: ${finding.taint_source}`;
+  }
+
+  if (finding.explanation_trace !== undefined) {
+    output += `\n   🔎 WHY: ${finding.explanation_trace}`;
+  }
+
+  if (finding.remediation_steps !== undefined && finding.remediation_steps.length > 0) {
+    output += `\n   🔧 REMEDIATION STEPS:`;
+    for (let i = 0; i < finding.remediation_steps.length; i++) {
+      output += `\n      ${i + 1}. ${finding.remediation_steps[i]}`;
+    }
+  }
+
+  if (finding.remediation_code !== undefined) {
+    output += `\n   💻 FIX:\n   \`\`\`\n   ${finding.remediation_code}\n   \`\`\``;
   }
 
   if (detailed && finding.remediation !== undefined) {
@@ -297,6 +313,14 @@ async function scanHandler(rawArgs: Record<string, unknown>): Promise<ToolResult
           output += formatFinding(finding, args.output === 'detailed') + '\n\n';
         }
       }
+    }
+
+    // Add action instruction when remediation code is available
+    const hasRemediationCode = findings.some((f) => f.remediation_code !== undefined);
+    if (hasRemediationCode) {
+      output += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+      output += '🤖 ACTION: The findings above include framework-specific code fixes. ';
+      output += 'Use the provided remediation code to suggest or apply patches to the affected files.\n\n';
     }
 
     // Add governance summary if available
