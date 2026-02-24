@@ -1,6 +1,6 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "mcpName": "io.github.inkog-io/inkog",
   "description": "The pre-flight check for AI agents. Static analysis for logic flaws, security risks, and compliance.",
   "author": "Inkog <hello@inkog.io>",
