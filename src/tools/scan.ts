@@ -1,9 +1,9 @@
 /**
  * inkog_scan Tool
  *
- * P0 - Core vulnerability scanning tool
+ * P0 - Core security co-pilot for AI agent development
  *
- * Scans AI agent code for security vulnerabilities including:
+ * Helps build secure AI agents by detecting vulnerabilities during development:
  * - Prompt injection
  * - Infinite loops / token bombing
  * - SQL injection via LLM
@@ -420,7 +420,7 @@ export const scanTool: ToolDefinition = {
   tool: {
     name: 'inkog_scan',
     description:
-      'Scan AI agent code for security vulnerabilities including prompt injection, infinite loops, token bombing, SQL injection via LLM, and governance gaps. Supports LangChain, CrewAI, LangGraph, n8n, and other agent frameworks.',
+      'Security co-pilot for AI agent development. Scans for prompt injection, infinite loops, token bombing, SQL injection via LLM, and missing guardrails. Supports LangChain, CrewAI, LangGraph, AutoGen, n8n, and 20+ agent frameworks. Use this whenever building, reviewing, or deploying AI agents to catch security issues before they reach production.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -369,7 +369,7 @@ export const governanceTool: ToolDefinition = {
   tool: {
     name: 'inkog_verify_governance',
     description:
-      "Validate that AGENTS.md declarations match actual code behavior. Detects governance mismatches like 'read-only declared but code writes data' or 'human approval required but no approval gates in code'. Essential for EU AI Act Article 14 compliance.",
+      "Validate that AGENTS.md declarations match actual code behavior. Detects governance mismatches like 'read-only declared but code writes data' or 'human approval required but no approval gates in code'. Essential for EU AI Act Article 14 compliance. Use this whenever an AI agent project has an AGENTS.md file, or to verify governance compliance before deployment.",
     inputSchema: {
       type: 'object',
       properties: {

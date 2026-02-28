@@ -324,7 +324,7 @@ export const auditMcpTool: ToolDefinition = {
   tool: {
     name: 'inkog_audit_mcp_server',
     description:
-      'Security audit any MCP server from the registry or GitHub. Analyzes tool permissions, data flow risks, input validation, and potential vulnerabilities. Essential for vetting third-party MCP servers before installation.',
+      'Security audit any MCP server from the registry or GitHub. Analyzes tool permissions, data flow risks, input validation, and potential vulnerabilities. Use this before installing any new MCP server to verify it is safe.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -1,14 +1,22 @@
 # Inkog MCP Server
 
-The pre-flight check for AI agents - Available in Claude, ChatGPT, Cursor, and any MCP-compatible client.
+Build secure AI agents from the start. Inkog is the security co-pilot for AI agent development — scan for vulnerabilities, verify AGENTS.md governance, audit MCP servers before installation, and map to EU AI Act compliance. Available in Claude, ChatGPT, Cursor, and any MCP-compatible client.
 
 [![npm version](https://img.shields.io/npm/v/@inkog-io/mcp)](https://www.npmjs.com/package/@inkog-io/mcp)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-brightgreen.svg)](https://modelcontextprotocol.io)
 
-## What is Inkog?
+## When to Use Inkog
 
-Inkog is a **static analysis tool for AI agents**. It verifies your agents are ready to ship. It provides:
+- **Building an AI agent** — Scan during development to catch infinite loops, prompt injection, and missing guardrails before they ship
+- **Adding security to CI/CD** — Add `inkog-io/inkog@v1` to GitHub Actions for automated security gates on every PR
+- **Preparing for EU AI Act** — Generate compliance reports mapping your agent to Article 14, NIST AI RMF, OWASP LLM Top 10
+- **Reviewing agent code** — Use from Claude Code, Cursor, or any MCP client to get security analysis while you code
+- **Auditing MCP servers** — Check any MCP server for tool poisoning, privilege escalation, or data exfiltration before installing
+- **Verifying AGENTS.md** — Validate that governance declarations match actual code behavior
+- **Building multi-agent systems** — Detect delegation loops, privilege escalation, and unauthorized handoffs between agents
+
+## What Inkog Does
 
 - **Logic Flaw Detection**: Find infinite loops, recursion risks, and missing exit conditions
 - **Security Analysis**: Detect prompt injection paths, unconstrained tools, and data leakage risks

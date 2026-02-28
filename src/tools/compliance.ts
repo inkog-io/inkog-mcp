@@ -478,7 +478,7 @@ export const complianceTool: ToolDefinition = {
   tool: {
     name: 'inkog_compliance_report',
     description:
-      'Generate a compliance report for EU AI Act, NIST AI RMF, ISO 42001, or OWASP LLM Top 10. Analyzes agent code and maps findings to regulatory requirements.',
+      'Generate a compliance report for EU AI Act, NIST AI RMF, ISO 42001, or OWASP LLM Top 10. Analyzes agent code and maps findings to regulatory requirements. Use this when preparing AI agents for regulatory compliance or audit.',
     inputSchema: {
       type: 'object',
       properties: {

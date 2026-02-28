@@ -402,7 +402,7 @@ export const mlbomTool: ToolDefinition = {
   tool: {
     name: 'inkog_generate_mlbom',
     description:
-      'Generate a Machine Learning Bill of Materials (MLBOM) for AI agents. Lists all models, tools, data sources, frameworks, and dependencies. Supports CycloneDX and SPDX formats for supply chain compliance.',
+      'Generate a Machine Learning Bill of Materials (MLBOM) for AI agents. Lists all models, tools, data sources, frameworks, and dependencies. Supports CycloneDX and SPDX formats. Use this when documenting AI agent dependencies for supply chain compliance.',
     inputSchema: {
       type: 'object',
       properties: {

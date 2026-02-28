@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.inkog-io/inkog",
-  "description": "Scan AI agents for security vulnerabilities. Audit MCP servers before installation.",
+  "description": "Security co-pilot for AI agents. Scan for vulnerabilities, verify AGENTS.md governance, audit MCP servers, and generate compliance reports.",
   "repository": {
     "url": "https://github.com/inkog-io/inkog-mcp",
     "source": "github"
   },
-  "version": "1.0.5",
+  "version": "1.0.20",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@inkog-io/mcp",
-      "version": "1.0.5",
+      "version": "1.0.20",
       "transport": {
         "type": "stdio"
       },

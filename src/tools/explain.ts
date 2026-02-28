@@ -248,7 +248,7 @@ export const explainTool: ToolDefinition = {
   tool: {
     name: 'inkog_explain_finding',
     description:
-      'Get detailed explanation and remediation guidance for a security finding or pattern. Includes what the issue is, why it\'s dangerous, step-by-step fixes, and code examples.',
+      'Get detailed explanation and remediation guidance for a security finding or pattern. Includes what the issue is, why it\'s dangerous, step-by-step fixes, and code examples. Use this after scanning to understand how to fix security findings.',
     inputSchema: {
       type: 'object',
       properties: {

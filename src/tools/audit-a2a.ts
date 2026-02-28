@@ -531,7 +531,7 @@ export const auditA2aTool: ToolDefinition = {
   tool: {
     name: 'inkog_audit_a2a',
     description:
-      'Audit Agent-to-Agent (A2A) communications in multi-agent systems. Detects infinite delegation loops, privilege escalation, data leakage between agents, and unauthorized handoffs. Supports Google A2A protocol, CrewAI, LangGraph, and AutoGen.',
+      'Audit Agent-to-Agent (A2A) communications in multi-agent systems. Detects infinite delegation loops, privilege escalation, data leakage between agents, and unauthorized handoffs. Supports Google A2A protocol, CrewAI, LangGraph, and AutoGen. Use this when building or reviewing multi-agent systems to detect delegation vulnerabilities.',
     inputSchema: {
       type: 'object',
       properties: {
