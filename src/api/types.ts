@@ -522,6 +522,22 @@ export interface A2AAuditResponse {
 }
 
 // =============================================================================
+// Deep Scan Types
+// =============================================================================
+
+export interface DeepScanTriggerResponse {
+  scan_id: string;
+  status: string;
+  message: string;
+}
+
+export interface DeepScanStatusResponse {
+  scan_id: string;
+  status: string; // "processing", "completed", "failed"
+  scan: Record<string, unknown> | null;
+}
+
+// =============================================================================
 // Error Types
 // =============================================================================
 

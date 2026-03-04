@@ -111,6 +111,7 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
 // This is done at module load time to ensure all tools are available
 
 import { scanTool } from './scan.js';
+import { deepScanTool } from './deep-scan.js';
 import { governanceTool } from './governance.js';
 import { complianceTool } from './compliance.js';
 import { explainTool } from './explain.js';
@@ -120,6 +121,7 @@ import { auditA2aTool } from './audit-a2a.js';
 
 // Register all tools
 registerTool(scanTool);
+registerTool(deepScanTool);
 registerTool(governanceTool);
 registerTool(complianceTool);
 registerTool(explainTool);

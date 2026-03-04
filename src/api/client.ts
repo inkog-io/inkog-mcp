@@ -19,6 +19,8 @@ import {
 import type {
   A2AAuditResponse,
   A2AProtocol,
+  DeepScanStatusResponse,
+  DeepScanTriggerResponse,
   ApiError,
   ComplianceFramework,
   ComplianceReportResponse,
@@ -366,6 +368,36 @@ export class InkogClient {
       method: 'POST',
       path: 'mlbom/generate',
       body,
+    });
+  }
+
+  /**
+   * Trigger an Inkog Deep scan.
+   * Sends files to /v1/scan/deep (JSON format, same as normal scan).
+   */
+  async triggerDeepScan(
+    files: FileInput[],
+    options?: {
+      agentName?: string;
+    }
+  ): Promise<DeepScanTriggerResponse> {
+    return this.request<DeepScanTriggerResponse>({
+      method: 'POST',
+      path: 'scan/deep',
+      body: {
+        files,
+        agent_name: options?.agentName,
+      },
+    });
+  }
+
+  /**
+   * Check deep scan status by scan ID.
+   */
+  async getDeepScanStatus(scanId: string): Promise<DeepScanStatusResponse> {
+    return this.request<DeepScanStatusResponse>({
+      method: 'GET',
+      path: `scan/deep/${scanId}`,
     });
   }
 
