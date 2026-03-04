@@ -159,7 +159,7 @@ function formatSummaryFromCounts(
   policy: SecurityPolicy
 ): string {
   let output = '╔══════════════════════════════════════════════════════╗\n';
-  output += '║           🔍 AI Agent Risk Assessment                ║\n';
+  output += '║           🔍 Inkog Core Scan Results                 ║\n';
   output += '╚══════════════════════════════════════════════════════╝\n\n';
 
   output += `📁 Files scanned: ${filesScanned}\n`;
