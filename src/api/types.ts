@@ -522,6 +522,60 @@ export interface A2AAuditResponse {
 }
 
 // =============================================================================
+// Skill / MCP Scan Types
+// =============================================================================
+
+export interface SkillScanDetailResponse {
+  success: boolean;
+  scan: Record<string, unknown>;
+}
+
+export interface SkillScanResponse {
+  success: boolean;
+  scan_id: string;
+  status: string;
+  error?: string;
+  result?: {
+    name: string;
+    overall_risk: string;
+    security_score: number;
+    risk_score: number;
+    files_scanned: number;
+    lines_of_code: number;
+    critical_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    findings: {
+      severity: string;
+      title: string;
+      description: string;
+      file?: string;
+      line?: number;
+      tool_name?: string;
+      owasp_agentic?: string;
+      owasp_mcp?: string;
+      remediation: string;
+      detection_layer: string;
+    }[];
+    tool_analyses: {
+      name: string;
+      risk_level: string;
+      risk_reasons?: string[];
+      attack_vectors?: string[];
+    }[];
+    permissions?: {
+      file_access: boolean;
+      network_access: boolean;
+      code_execution: boolean;
+      database_access: boolean;
+      environment_access: boolean;
+      scope: string;
+    };
+  };
+}
+
+// =============================================================================
 // Deep Scan Types
 // =============================================================================
 

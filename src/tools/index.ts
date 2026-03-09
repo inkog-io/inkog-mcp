@@ -118,6 +118,8 @@ import { explainTool } from './explain.js';
 import { auditMcpTool } from './audit-mcp.js';
 import { mlbomTool } from './mlbom.js';
 import { auditA2aTool } from './audit-a2a.js';
+import { skillScanTool } from './skill-scan.js';
+import { mcpScanTool } from './mcp-scan.js';
 
 // Register all tools
 registerTool(scanTool);
@@ -128,6 +130,8 @@ registerTool(explainTool);
 registerTool(auditMcpTool);
 registerTool(mlbomTool);
 registerTool(auditA2aTool);
+registerTool(skillScanTool);
+registerTool(mcpScanTool);
 
 // Export tool count for debugging
 export const registeredToolCount = toolRegistry.size;

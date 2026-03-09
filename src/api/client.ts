@@ -31,6 +31,8 @@ import type {
   MlbomResponse,
   ScanResponse,
   SecurityPolicy,
+  SkillScanDetailResponse,
+  SkillScanResponse,
 } from './types.js';
 
 // =============================================================================
@@ -311,6 +313,68 @@ export class InkogClient {
     return this.request<ExplainResponse>({
       method: 'GET',
       path: `findings/${patternId}/explain`,
+    });
+  }
+
+  /**
+   * Scan a skill package from a repository URL
+   */
+  async scanSkill(options: {
+    repositoryUrl: string;
+  }): Promise<SkillScanResponse> {
+    return this.request<SkillScanResponse>({
+      method: 'POST',
+      path: 'scan/skills',
+      body: {
+        repository_url: options.repositoryUrl,
+      },
+    });
+  }
+
+  /**
+   * Scan an MCP server from registry or by URL
+   */
+  async scanMCPServer(options: {
+    serverName?: string;
+    url?: string;
+  }): Promise<SkillScanResponse> {
+    if (options.serverName === undefined && options.url === undefined) {
+      throw new Error('Either serverName or url must be provided');
+    }
+
+    const body: Record<string, unknown> = {};
+    if (options.serverName) {
+      body.server_name = options.serverName;
+    }
+    if (options.url) {
+      body.url = options.url;
+    }
+
+    return this.request<SkillScanResponse>({
+      method: 'POST',
+      path: 'scan/skills/mcp',
+      body,
+    });
+  }
+
+  /**
+   * Trigger AI deep analysis for a skill/MCP scan
+   */
+  async triggerSkillDeepScan(scanId: string): Promise<void> {
+    await this.request<{ success: boolean }>({
+      method: 'POST',
+      path: `scan/skills/${scanId}/ai`,
+      body: {},
+    });
+  }
+
+  /**
+   * Get skill/MCP scan details (including deep analysis results)
+   */
+  async getSkillScan(scanId: string): Promise<SkillScanDetailResponse> {
+    return this.request<SkillScanDetailResponse>({
+      method: 'GET',
+      path: `scan/skills/${scanId}`,
     });
   }
 
