@@ -34,7 +34,13 @@
     "chatgpt",
     "prompt-injection",
     "token-bombing",
-    "infinite-loop-detection"
+    "infinite-loop-detection",
+    "vulnerability-scanner",
+    "mcp-server",
+    "static-analysis",
+    "devsecops",
+    "sast",
+    "owasp-agentic-top-10"
   ],
   "type": "module",
   "main": "dist/index.js",
