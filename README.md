@@ -1,10 +1,35 @@
 # Inkog MCP Server
 
-Build secure AI agents from the start. Inkog is the security co-pilot for AI agent development — scan for vulnerabilities, verify AGENTS.md governance, audit MCP servers before installation, and map to EU AI Act compliance. Available in Claude, ChatGPT, Cursor, and any MCP-compatible client.
+**Security companion for AI agent development in Claude, Cursor, and Claude Code.**
+
+Ask your AI pair-programmer to build an agent. Inkog checks it as you code — scanning for vulnerabilities, explaining findings in plain English, verifying AGENTS.md governance, and auditing agent-to-agent delegation. All inside the same conversation, no context switch.
+
+Available in Claude Desktop, Cursor, Claude Code, ChatGPT, and any MCP-compatible client.
 
 [![npm version](https://img.shields.io/npm/v/@inkog-io/mcp)](https://www.npmjs.com/package/@inkog-io/mcp)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-brightgreen.svg)](https://modelcontextprotocol.io)
+
+## The Dev-Flow Loop
+
+Inkog is designed to live inside the conversation where you build the agent — not as a post-hoc gate:
+
+1. **Ask Claude to build a piece of agent logic.**
+2. **Ask Claude to scan it with Inkog** — `"Scan this with Inkog and show me any CRITICAL or HIGH findings."`
+3. **Ask Claude to explain each finding in plain English** — `"Explain the top finding. What's the risk, and how do I fix it?"`
+4. **Ask Claude to apply the fixes.** Review the diff, approve, re-scan.
+5. **Before shipping, verify governance** — `"Verify my AGENTS.md against the code"` and `"Audit the agent-to-agent delegation"`.
+
+Read the full walkthrough: [Building Secure AI Agents with Claude Code and the Inkog MCP](https://inkog.io/labs/building-secure-agents-with-claude-code).
+
+### Recommended prompts
+
+- *"Scan the current directory with Inkog and show me any CRITICAL or HIGH findings."*
+- *"Explain the top finding in plain English. What's the risk, and how do I fix it?"*
+- *"Verify my AGENTS.md against the code."*
+- *"Audit the agent-to-agent delegation in this crew."*
+- *"Run a compliance report and map the findings to EU AI Act Articles 12, 14, and 15."*
+- *"Audit the MCP servers I'm integrating with."*
 
 ## When to Use Inkog
 
@@ -235,9 +260,9 @@ npm run lint
 
 ## Why Inkog?
 
-### The Pre-Flight Check for AI Agents
+### Security in the Dev-Flow, Not After It
 
-Think of Inkog like the checklist pilots run before takeoff. You don't skip it even when you're confident. It verifies your agent is ready to ship.
+Most AI agent security tools run after the code is written. Inkog lives inside the conversation where you build the agent — so findings get fixed before they land in a PR, not three weeks later.
 
 ### The Only Tool with AGENTS.md Verification
 
