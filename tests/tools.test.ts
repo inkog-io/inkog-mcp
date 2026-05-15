@@ -52,8 +52,10 @@ describe('tools', () => {
       expect(registeredToolCount).toBe(tools.length);
     });
 
-    it('is 7 tools total', () => {
-      expect(registeredToolCount).toBe(7);
+    it('is 10 tools total', () => {
+      // Tool count grew from 7 → 10 (added inkog_audit_a2a, inkog_skill_scan,
+      // inkog_mcp_scan). Update this when adding/removing tools.
+      expect(registeredToolCount).toBe(10);
     });
   });
 
