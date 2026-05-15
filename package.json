@@ -1,6 +1,6 @@
 {
   "name": "@inkog-io/mcp",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "mcpName": "io.github.inkog-io/inkog",
   "description": "Security co-pilot for AI agents. Scan for vulnerabilities, verify governance, audit MCP servers, and generate compliance reports — all from Claude, Cursor, or any MCP client.",
   "author": "Inkog <hello@inkog.io>",
