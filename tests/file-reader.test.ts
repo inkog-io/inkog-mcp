@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   matchesGlobPattern,
   calculateFilePriority,
+  readDirectory,
+  getRelativePaths,
 } from '../src/utils/file-reader.js';
 
 describe('file-reader', () => {
@@ -330,6 +335,68 @@ describe('file-reader', () => {
 
       expect(scored[0].path).toBe('tests/agent_helper.py');
       expect(scored[1].path).toBe('tests/test_utils.py');
+    });
+  });
+
+  // ==========================================================================
+  // Microsoft Copilot Studio: extensionless botcomponents/**/data collection
+  //
+  // Copilot Studio solution exports store each botcomponent definition (topics,
+  // knowledge, custom GPT, settings) in an extensionless file literally named
+  // `data` under botcomponents/. The extension allowlist would drop these,
+  // producing a hollow deep scan. readDirectory must keep them — but only when
+  // scoped to botcomponents/ (mirrors the CLI's shouldScanFile).
+  // ==========================================================================
+  describe('Copilot Studio botcomponents/**/data collection', () => {
+    function makeFixture(): string {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'inkog-cs-'));
+      const comp = path.join(root, 'botcomponents', 'cr871_assistant.topic.Greeting');
+      fs.mkdirSync(comp, { recursive: true });
+      fs.writeFileSync(path.join(comp, 'data'), 'kind: AdaptiveDialog\nbeginDialog: {}\n');
+      fs.writeFileSync(path.join(comp, 'botcomponent.xml'), '<botcomponent />');
+      // A stray extensionless `data` file OUTSIDE botcomponents/ must NOT be collected.
+      fs.writeFileSync(path.join(root, 'data'), 'unrelated');
+      // A binary export artifact that should still be skipped.
+      fs.mkdirSync(path.join(root, 'bots'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'bots', 'bot.xml'), '<bot />');
+      return root;
+    }
+
+    it('collects extensionless data files under botcomponents/', () => {
+      const root = makeFixture();
+      try {
+        const res = readDirectory(root);
+        const paths = getRelativePaths(res.files, root).map((f) => f.path);
+        expect(paths).toContain('botcomponents/cr871_assistant.topic.Greeting/data');
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('preserves the data file content (not empty)', () => {
+      const root = makeFixture();
+      try {
+        const res = readDirectory(root);
+        const files = getRelativePaths(res.files, root);
+        const dataFile = files.find(
+          (f) => f.path === 'botcomponents/cr871_assistant.topic.Greeting/data'
+        );
+        expect(dataFile).toBeDefined();
+        expect(dataFile?.content).toContain('AdaptiveDialog');
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('does NOT collect extensionless data files outside botcomponents/', () => {
+      const root = makeFixture();
+      try {
+        const res = readDirectory(root);
+        const paths = getRelativePaths(res.files, root).map((f) => f.path);
+        expect(paths).not.toContain('data');
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
     });
   });
 });

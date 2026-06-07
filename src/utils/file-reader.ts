@@ -581,7 +581,10 @@ export function readDirectory(dirPath: string, options?: ReadOptions): ReadResul
 
       // Check extension against allowed list
       const ext = path.extname(currentPath).toLowerCase();
-      if (extensions.length > 0 && !extensions.includes(ext)) {
+      const isCopilotStudioData =
+        path.basename(currentPath) === 'data' &&
+        currentPath.includes(`botcomponents${path.sep}`);
+      if (extensions.length > 0 && !extensions.includes(ext) && !isCopilotStudioData) {
         return;
       }
 
