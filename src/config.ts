@@ -5,7 +5,18 @@
  * Uses environment variables with sensible defaults.
  */
 
+import { createRequire } from 'node:module';
 import { z } from 'zod';
+
+/** Version from package.json, so the MCP handshake and logs report the published version. */
+const packageVersion: string = (() => {
+  try {
+    const pkg = createRequire(import.meta.url)('../package.json') as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
 
 /**
  * Configuration schema with validation
@@ -20,7 +31,7 @@ const ConfigSchema = z.object({
 
   // MCP Server Configuration
   serverName: z.string().default('inkog'),
-  serverVersion: z.string().default('1.0.0'),
+  serverVersion: z.string().default(packageVersion),
 
   // Feature Flags
   enableMcpAudit: z.boolean().default(true),

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getConfig, getApiKey, resetConfig, createConfig, buildApiUrl } from '../src/config.js';
 import type { Config } from '../src/config.js';
@@ -23,7 +24,8 @@ describe('config', () => {
       expect(config.apiBaseUrl).toBe('https://api.inkog.io');
       expect(config.apiVersion).toBe('v1');
       expect(config.serverName).toBe('inkog');
-      expect(config.serverVersion).toBe('1.0.0');
+      // Server version follows package.json so the MCP handshake reports the published version
+      expect(config.serverVersion).toBe(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
       expect(config.logLevel).toBe('info');
       expect(config.logFormat).toBe('json');
       expect(config.apiTimeout).toBe(180000); // 3 minutes to match backend
