@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "identifier": "@inkog-io/mcp",
-      "version": "1.0.20",
+      "version": "1.0.22",
       "transport": {
         "type": "stdio"
       },
