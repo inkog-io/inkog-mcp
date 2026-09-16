@@ -6,7 +6,7 @@
     "url": "https://github.com/inkog-io/inkog-mcp",
     "source": "github"
   },
-  "version": "1.0.21",
+  "version": "1.0.22",
   "packages": [
     {
       "registryType": "npm",
