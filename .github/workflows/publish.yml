@@ -21,15 +21,31 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
+      - name: Check publish credentials
+        id: creds
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN secret is not set; skipping npm publish. Publish manually with: npm publish --access public --otp=<code>"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
       - run: npm ci
+        if: steps.creds.outputs.available == 'true'
       - name: Verify tag matches package.json version
+        if: steps.creds.outputs.available == 'true'
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "v${PKG_VERSION}" != "${GITHUB_REF_NAME}" ]; then
             echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${PKG_VERSION}"; exit 1
           fi
       - run: npm run build
+        if: steps.creds.outputs.available == 'true'
       - run: npm run test:run
+        if: steps.creds.outputs.available == 'true'
       - run: npm publish --provenance --access public
+        if: steps.creds.outputs.available == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
